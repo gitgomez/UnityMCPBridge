@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from click.testing import CliRunner
 
+from cli import __version__
 from cli.main import cli
 from cli.utils.config import CLIConfig, get_config, set_config
 from cli.utils.output import (
@@ -298,6 +299,7 @@ class TestCLICommands:
         """Test CLI version command."""
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
+        assert result.output == f"unity-mcp, version {__version__}\n"
 
     def test_receipt_admin_cli_keeps_cleanup_scopes_and_confirmation_explicit(
         self,

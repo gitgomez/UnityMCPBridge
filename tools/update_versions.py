@@ -26,6 +26,7 @@ PACKAGE_JSON = REPO_ROOT / "MCPForUnity" / "package.json"
 MANIFEST_JSON = REPO_ROOT / "manifest.json"
 PYPROJECT_TOML = REPO_ROOT / "Server" / "pyproject.toml"
 UV_LOCK = REPO_ROOT / "Server" / "uv.lock"
+CLI_INIT = REPO_ROOT / "Server" / "src" / "cli" / "__init__.py"
 SERVER_README = REPO_ROOT / "Server" / "README.md"
 ROOT_README = REPO_ROOT / "README.md"
 FORK_GUIDE = REPO_ROOT / "docs" / "getting-started" / "bridge-fork.md"
@@ -139,6 +140,14 @@ def update_uv_lock(version: str, dry_run: bool) -> bool:
     )
 
 
+def update_cli_version(version: str, dry_run: bool) -> bool:
+    return replace_required(
+        CLI_INIT,
+        [(r'^__version__ = "[^"]+"', f'__version__ = "{version}"')],
+        dry_run,
+    )
+
+
 def update_public_install_examples(version: str, dry_run: bool) -> list[str]:
     package_url = (
         "https://github.com/gitgomez/UnityMCPBridge.git"
@@ -206,6 +215,7 @@ def synchronize(version: str, dry_run: bool) -> list[str]:
         (MANIFEST_JSON, update_manifest_json),
         (PYPROJECT_TOML, update_pyproject),
         (UV_LOCK, update_uv_lock),
+        (CLI_INIT, update_cli_version),
     ]
     for path, operation in operations:
         if operation(version, dry_run):

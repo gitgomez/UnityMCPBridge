@@ -19,6 +19,7 @@ def release_tree(tmp_path, monkeypatch):
         "MANIFEST_JSON": tmp_path / "manifest.json",
         "PYPROJECT_TOML": tmp_path / "Server" / "pyproject.toml",
         "UV_LOCK": tmp_path / "Server" / "uv.lock",
+        "CLI_INIT": tmp_path / "Server" / "src" / "cli" / "__init__.py",
         "SERVER_README": tmp_path / "Server" / "README.md",
         "ROOT_README": tmp_path / "README.md",
         "FORK_GUIDE": tmp_path / "docs" / "getting-started" / "bridge-fork.md",
@@ -54,6 +55,7 @@ def release_tree(tmp_path, monkeypatch):
         '[[package]]\nname = "mcpforunityserver"\nversion = "10.1.0"\nsource = { editable = "." }\n',
         encoding="utf-8",
     )
+    paths["CLI_INIT"].write_text('__version__ = "1.0.0"\n', encoding="utf-8")
 
     package_url = "https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.1.0"
     server_url = "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.1.0#subdirectory=Server"
@@ -81,13 +83,14 @@ def release_tree(tmp_path, monkeypatch):
 def test_synchronize_updates_all_release_owned_surfaces(release_tree):
     changed = update_versions.synchronize("10.2.0", dry_run=False)
 
-    assert len(changed) == 9
+    assert len(changed) == 10
     assert json.loads(release_tree["PACKAGE_JSON"].read_text())["version"] == "10.2.0"
     manifest = json.loads(release_tree["MANIFEST_JSON"].read_text())
     assert manifest["version"] == "10.2.0"
     assert "@v10.2.0#subdirectory=Server" in manifest["server"]["mcp_config"]["args"][1]
     assert 'version = "10.2.0"' in release_tree["PYPROJECT_TOML"].read_text()
     assert 'version = "10.2.0"' in release_tree["UV_LOCK"].read_text()
+    assert '__version__ = "10.2.0"' in release_tree["CLI_INIT"].read_text()
 
     for name in (
         "SERVER_README",
@@ -108,7 +111,7 @@ def test_dry_run_reports_drift_without_writing(release_tree):
 
     changed = update_versions.synchronize("10.2.0", dry_run=True)
 
-    assert len(changed) == 9
+    assert len(changed) == 10
     assert release_tree["PACKAGE_JSON"].read_text(encoding="utf-8") == before
 
 
