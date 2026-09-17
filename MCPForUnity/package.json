@@ -1,0 +1,33 @@
+{
+  "name": "com.coplaydev.unity-mcp",
+  "version": "10.2.4",
+  "displayName": "MCP for Unity",
+  "description": "UnityMCPBridge connects AI assistants to Unity through the Model Context Protocol. This personally maintained fork adds runtime UI interaction, durable command receipts, administrative recovery, and stronger Editor-readiness handling.",
+  "unity": "6000.0",
+  "documentationUrl": "https://github.com/gitgomez/UnityMCPBridge/blob/main/docs/getting-started/bridge-fork.md",
+  "licensesUrl": "https://github.com/gitgomez/UnityMCPBridge/blob/main/LICENSE",
+  "dependencies": {
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.physics2d": "1.0.0",
+    "com.unity.modules.uielements": "1.0.0",
+    "com.unity.modules.screencapture": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.unity.test-framework": "1.6.0"
+  },
+  "keywords": [
+    "unity",
+    "ai",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "mcp-client"
+  ],
+  "author": {
+    "name": "Gomez",
+    "url": "https://github.com/gitgomez/UnityMCPBridge"
+  }
+}

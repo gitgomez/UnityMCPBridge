@@ -1,0 +1,232 @@
+name: Unity Tests (Optional Hosted Runner)
+
+# This workflow is optional hosted-runner verification. It runs real Unity
+# tests only when a runner license has already been configured by a maintainer.
+# Missing credentials are an expected skip, not a publication requirement or
+# a request to upload a personal Unity account to GitHub.
+
+on:
+  workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to test (defaults to the triggering ref)."
+        type: string
+        required: false
+        default: ""
+  push:
+    # main is validated through its promotion PR and again through the
+    # tag-triggered source-release workflow.
+    branches-ignore: [main]
+    paths:
+      - TestProjects/UnityMCPTests/**
+      - MCPForUnity/Editor/**
+      - MCPForUnity/Runtime/**
+      - Contracts/**
+      - .github/workflows/unity-tests.yml
+  # Pull requests run only in the unprivileged pull_request context. Fork code
+  # never receives repository secrets or a write-capable token.
+  pull_request:
+    branches: [main, optimize/bridge]
+    paths:
+      - TestProjects/UnityMCPTests/**
+      - MCPForUnity/Editor/**
+      - MCPForUnity/Runtime/**
+      - Contracts/**
+      - .github/workflows/unity-tests.yml
+# Dedup runs for the same branch across push / pull_request / workflow_call.
+# Same-repo PRs would otherwise fire both push (on the branch SHA) AND pull_request (on the PR);
+# concurrency keeps only the newer in-flight run per branch.
+concurrency:
+  group: unity-tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: Compute Unity version matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      versions: ${{ steps.set.outputs.versions }}
+    steps:
+      - name: Checkout version manifest
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.ref }}
+          sparse-checkout: tools/unity-versions.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Select versions for this trigger
+        id: set
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_REF: ${{ github.ref }}
+          FULL_MATRIX_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'full-matrix') }}
+        run: |
+          set -euo pipefail
+          # Full matrix on: workflow_call (release pipeline), workflow_dispatch,
+          # or any pull request whose current revision carries 'full-matrix'.
+          # Default (single defaultVersion from tools/unity-versions.json) otherwise — fast PR feedback.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]] || \
+             [[ "$EVENT_NAME" == "workflow_call" ]] || \
+             { [[ "$EVENT_NAME" == "pull_request" ]] && [[ "$FULL_MATRIX_LABEL" == "true" ]]; }; then
+            versions=$(jq -c '[.versions[].id]' tools/unity-versions.json)
+            echo "Trigger '$EVENT_NAME' on ref '$GH_REF' (full_matrix_label=$FULL_MATRIX_LABEL) → full matrix: $versions"
+          else
+            versions=$(jq -c '[.defaultVersion]' tools/unity-versions.json)
+            echo "Trigger '$EVENT_NAME' on ref '$GH_REF' → default only: $versions"
+          fi
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+
+  testAllModes:
+    name: Test in ${{ matrix.testMode }} on Unity ${{ matrix.unityVersion }}
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        projectPath:
+          - TestProjects/UnityMCPTests
+        testMode:
+          - editmode
+        unityVersion: ${{ fromJson(needs.matrix.outputs.versions) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.ref }}
+          persist-credentials: false
+
+      - name: Detect Unity license secrets
+        id: detect
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        run: |
+          set -e
+          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ] && [ -n "$UNITY_SERIAL" ]; }; then
+            echo "unity_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "unity_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Explain optional Unity verification skip
+        if: steps.detect.outputs.unity_ok != 'true'
+        run: |
+          echo "::notice::Optional hosted-runner Unity verification was not configured and has been skipped."
+          {
+            echo "### Unity verification not run"
+            echo
+            echo "This optional hosted-runner check has no configured Unity runner license."
+            echo "No Unity credentials are required for source publication, repository visibility, or installation."
+            echo "Local Unity verification remains a separate maintainer workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.detect.outputs.unity_ok == 'true'
+        with:
+          path: ${{ matrix.projectPath }}/Library
+          key: Library-${{ matrix.projectPath }}-${{ matrix.unityVersion }}
+          restore-keys: |
+            Library-${{ matrix.projectPath }}-
+            Library-
+
+      # Run domain reload tests first (they're [Explicit] so need explicit category)
+      - name: Run domain reload tests
+        if: steps.detect.outputs.unity_ok == 'true'
+        uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4
+        id: domain-tests
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: ${{ matrix.projectPath }}
+          unityVersion: ${{ matrix.unityVersion }}
+          testMode: ${{ matrix.testMode }}
+          customParameters: -testCategory domain_reload
+
+      - name: Run tests
+        if: steps.detect.outputs.unity_ok == 'true'
+        uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4
+        id: tests
+        continue-on-error: true
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: ${{ matrix.projectPath }}
+          unityVersion: ${{ matrix.unityVersion }}
+          testMode: ${{ matrix.testMode }}
+
+      - name: Check test results
+        if: steps.detect.outputs.unity_ok == 'true'
+        env:
+          ARTIFACTS_PATH: ${{ steps.tests.outputs.artifactsPath }}
+        run: |
+          set -euo pipefail
+          # `|| true` so a missing $ARTIFACTS_PATH (Unity crashed before producing any) doesn't trip
+          # `pipefail` and skip the explicit empty-check diagnostic below.
+          RESULTS_XML=$(find "$ARTIFACTS_PATH" -name '*.xml' 2>/dev/null | head -1 || true)
+          if [ -z "$RESULTS_XML" ]; then
+            echo "::error::No test results XML found — Unity may have crashed"
+            exit 1
+          fi
+          python3 - "$RESULTS_XML" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          # Escape workflow-command payloads so test-controlled XML can't break
+          # annotation rendering or inject extra workflow commands.
+          # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          def esc_data(s):
+              return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          def esc_prop(s):
+              return esc_data(s).replace(":", "%3A").replace(",", "%2C")
+          root = ET.parse(sys.argv[1]).getroot()
+          totals = root.attrib
+          passed = totals.get("passed", "?")
+          failed = totals.get("failed", "?")
+          total  = totals.get("total", "?")
+          incon  = totals.get("inconclusive", "?")
+          skipped = totals.get("skipped", "?")
+          print(f"Results: {passed} passed, {failed} failed, {incon} inconclusive, {skipped} skipped (total: {total})")
+          fails = [tc for tc in root.iter("test-case") if tc.attrib.get("result") == "Failed"]
+          if not fails:
+              sys.exit(0)
+          # Surface every failure inline so a CI watcher doesn't need to download the NUnit XML artifact.
+          for tc in fails:
+              name = tc.attrib.get("fullname") or tc.attrib.get("name") or "<unknown>"
+              f = tc.find("failure")
+              msg = (f.findtext("message") or "").strip() if f is not None else ""
+              stack = (f.findtext("stack-trace") or "").strip() if f is not None else ""
+              # First line of the message becomes the GitHub annotation title.
+              first_line = msg.splitlines()[0] if msg else "(no message)"
+              # GitHub annotations don't render multi-line bodies, so emit the full failure inside a collapsible group.
+              print(f"::error title=Failed: {esc_prop(name)}::{esc_data(first_line)}")
+              print(f"::group::Failure details — {esc_data(name)}")
+              if msg:
+                  print("Message:")
+                  print(msg)
+              if stack:
+                  print("Stack trace:")
+                  print(stack)
+              print("::endgroup::")
+          print(f"::error::{len(fails)} test(s) failed")
+          sys.exit(1)
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.detect.outputs.unity_ok == 'true' && steps.tests.outcome != 'skipped'
+        with:
+          name: Test results for ${{ matrix.testMode }} on Unity ${{ matrix.unityVersion }}
+          path: ${{ steps.tests.outputs.artifactsPath }}

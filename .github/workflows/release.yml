@@ -1,0 +1,97 @@
+name: Source Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: source-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate release identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require Gomez as release publisher
+        shell: bash
+        env:
+          RELEASE_ACTOR: ${{ github.actor }}
+        run: |
+          if [[ "$RELEASE_ACTOR" != "gitgomez" ]]; then
+            echo "Only Gomez (gitgomez) may publish UnityMCPBridge releases; got: $RELEASE_ACTOR" >&2
+            exit 1
+          fi
+
+      - name: Checkout tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Require a stable semantic-version tag at the main tip
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH; got: $TAG" >&2
+            exit 1
+          fi
+
+          git fetch origin main
+          MAIN_SHA="$(git rev-parse origin/main)"
+          if [[ "$GITHUB_SHA" != "$MAIN_SHA" ]]; then
+            echo "The tagged commit ($GITHUB_SHA) is not the origin/main tip ($MAIN_SHA)." >&2
+            exit 1
+          fi
+
+      - name: Require synchronized release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          python tools/update_versions.py --check --version "$VERSION"
+
+  unity_tests:
+    # Optional hosted-runner verification. When no Unity runner license is
+    # configured, the reusable workflow reports an explicit skip and succeeds.
+    # Source publication and installation never require maintainer credentials.
+    name: Unity verification (optional hosted runner)
+    uses: ./.github/workflows/unity-tests.yml
+    with:
+      ref: ${{ github.ref }}
+    secrets: inherit
+
+  python_tests:
+    name: Python tests gate
+    uses: ./.github/workflows/python-tests.yml
+    with:
+      ref: ${{ github.ref }}
+
+  release:
+    name: Publish GitHub source release
+    needs: [metadata, unity_tests, python_tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release from tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "UnityMCPBridge $GITHUB_REF_NAME" \
+            --generate-notes
+
+# This workflow intentionally publishes source only. It does not publish to
+# PyPI or Docker and does not generate or attach an MCPB bundle.

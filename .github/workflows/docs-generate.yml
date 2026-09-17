@@ -1,0 +1,80 @@
+name: Docs — Reference Drift Check
+
+# Fails a PR if the committed /docs/reference/ output disagrees
+# with what tools/generate_docs_reference.py would produce from the live
+# Python tool/resource registry. Contributors should regenerate locally:
+#
+#   cd Server && uv run python ../tools/generate_docs_reference.py
+#
+# or install the pre-commit hook to make this automatic:
+#
+#   tools/install-hooks.sh
+
+on:
+  pull_request:
+    branches: [main, optimize/bridge]
+    paths:
+      - Server/src/services/tools/**
+      - Server/src/services/resources/**
+      - Server/src/services/registry/**
+      - docs/reference/**
+      - tools/generate_docs_reference.py
+      - .github/workflows/docs-generate.yml
+  push:
+    branches: [optimize/bridge]
+    paths:
+      - Server/src/services/tools/**
+      - Server/src/services/resources/**
+      - Server/src/services/registry/**
+      - docs/reference/**
+      - tools/generate_docs_reference.py
+      - .github/workflows/docs-generate.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check docs reference is fresh
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: latest
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      - name: Sync Server deps
+        working-directory: Server
+        run: uv sync
+
+      - name: Drift check
+        working-directory: Server
+        run: uv run python ../tools/generate_docs_reference.py --check
+
+      - name: Tool-count sanity
+        run: |
+          set -euo pipefail
+          # Match the decorator at start-of-line (skips imports and docstring mentions).
+          decorator_count=$(grep -rhE "^@mcp_for_unity_tool\(" Server/src/services/tools/ | wc -l | tr -d ' ')
+          # md_count excludes group landing pages (index.md) and the catalog root.
+          md_count=$(find docs/reference/tools -name '*.md' -not -name 'index.md' | wc -l | tr -d ' ')
+          echo "decorator_count=$decorator_count, md_count=$md_count"
+          if [[ "$decorator_count" != "$md_count" ]]; then
+            echo "Mismatch: $decorator_count @mcp_for_unity_tool decorators vs $md_count reference pages." >&2
+            echo "Run: cd Server && uv run python ../tools/generate_docs_reference.py" >&2
+            exit 1
+          fi
