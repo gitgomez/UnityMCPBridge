@@ -465,6 +465,13 @@ announced reload that exceeds its original bounded wait reports `reload_timeout`
 The wait budget starts at the lifecycle signal and is never restarted by later calls.
 Legacy peers retain the previous bounded reconnect wait.
 
+The local CLI REST route uses the same instance-aware Runtime-v1 dispatcher as MCP
+tools. It must not snapshot a WebSocket session and send directly to that transient
+session ID: during an announced reload, dependent CLI commands wait for the replacement
+session, while an admitted command that loses its response is recovered with the same
+logical request ID and receipt. This preserves the one-execution guarantee across the
+HTTP-to-WebSocket boundary.
+
 - Persisted `accepted` or `queued` receipts restored after reload become `cancelled`
   with code `RELOAD_BEFORE_EXECUTION`; Unity knows they never entered execution.
 - Persisted `executing` receipts restored after reload become `outcome_unknown`.

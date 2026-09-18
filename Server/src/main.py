@@ -14,6 +14,7 @@ from transport.plugin_hub import (
     NoUnitySessionError,
     PluginHub,
 )
+from transport.cli_command_dispatch import dispatch_cli_command
 from services.custom_tool_service import (
     CustomToolService,
     resolve_project_id_for_unity_instance,
@@ -427,62 +428,41 @@ def create_mcp_server(project_scoped_tools: bool) -> FastMCP:
                 if not command_type:
                     return JSONResponse({"success": False, "error": "Missing 'type' field"}, status_code=400)
 
-                # Get available sessions
-                sessions = await PluginHub.get_sessions()
-                if not sessions.sessions:
-                    return JSONResponse({
-                        "success": False,
-                        "error": "No Unity instances connected. Make sure Unity is running with MCP plugin."
-                    }, status_code=503)
-
-                # Find target session
-                session_id = None
-                session_details = None
-                instance_name, instance_hash = _normalize_instance_token(
-                    unity_instance)
-                if unity_instance:
-                    # Try to match by hash or project name
-                    for sid, details in sessions.sessions.items():
-                        if details.hash == instance_hash or details.project in (instance_name, unity_instance):
-                            session_id = sid
-                            session_details = details
-                            break
-
-                # If a specific unity_instance was requested but not found, return an error
-                # (Check done here so execute_custom_tool can also validate the instance)
-                if unity_instance and not session_id:
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "error": f"Unity instance '{unity_instance}' not found",
-                        },
-                        status_code=404,
-                    )
-
-                # If no specific unity_instance requested, use first available session
-                # (Must be done before execute_custom_tool check so all command types benefit)
-                if not session_id:
-                    try:
-                        session_id = next(iter(sessions.sessions.keys()))
-                        session_details = sessions.sessions.get(session_id)
-                    except StopIteration:
-                        # No sessions available - sessions.sessions is empty
-                        # This should not happen since we checked at line 378, but handle gracefully
-                        return JSONResponse({
-                            "success": False,
-                            "error": "No Unity instances connected. Make sure Unity is running with MCP plugin."
-                        }, status_code=503)
-
                 # Custom tool execution - must be checked BEFORE the final PluginHub.send_command call
                 # This applies to both cases: with or without explicit unity_instance
                 if command_type == "execute_custom_tool":
-                    # session_id and session_details are already set above
-                    if not session_id or not session_details:
+                    sessions = await PluginHub.get_sessions()
+                    if not sessions.sessions:
                         return JSONResponse(
-                            {"success": False,
-                                "error": "No valid Unity session available for custom tool execution"},
+                            {
+                                "success": False,
+                                "error": "No Unity instances connected. Make sure Unity is running with MCP plugin.",
+                            },
                             status_code=503,
                         )
+
+                    session_details = None
+                    instance_name, instance_hash = _normalize_instance_token(
+                        unity_instance)
+                    if unity_instance:
+                        for details in sessions.sessions.values():
+                            if details.hash == instance_hash or details.project in (
+                                instance_name,
+                                unity_instance,
+                            ):
+                                session_details = details
+                                break
+                        if not session_details:
+                            return JSONResponse(
+                                {
+                                    "success": False,
+                                    "error": f"Unity instance '{unity_instance}' not found",
+                                },
+                                status_code=404,
+                            )
+                    else:
+                        session_details = next(iter(sessions.sessions.values()))
+
                     tool_name = None
                     tool_params = {}
                     if isinstance(params, dict):
@@ -526,9 +506,12 @@ def create_mcp_server(project_scoped_tools: bool) -> FastMCP:
                     )
                     return JSONResponse(result.model_dump())
 
-                # Send command to Unity
-                result = await PluginHub.send_command(session_id, command_type, params)
-                return JSONResponse(result)
+                result, status_code = await dispatch_cli_command(
+                    command_type,
+                    params,
+                    unity_instance,
+                )
+                return JSONResponse(result, status_code=status_code)
 
             except Exception as e:
                 logger.exception("CLI command error: %s", e)

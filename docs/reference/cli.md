@@ -19,6 +19,13 @@ uvx --from mcpforunityserver unity-mcp <command> [args]
 
 The CLI uses **HTTP** to the Python server (default `http://127.0.0.1:8080`), regardless of how your MCP clients are configured. The Python server in turn talks to the connected Unity Editor via WebSocket. MCP tools take a similar path via WebSocket directly; CLI commands take HTTP.
 
+During an announced Unity domain reload, the local command route keeps the selected
+`Name@hash`, waits for the replacement WebSocket session, and recovers an admitted
+Runtime-v1 command through its existing receipt instead of issuing a new mutation.
+The HTTP server on port `8080`, the instance list, and editor state are the relevant
+health surfaces in this mode; a legacy stdio listener such as port `6400` is not
+required.
+
 ## Global flags
 
 | Flag | Default | Meaning |
