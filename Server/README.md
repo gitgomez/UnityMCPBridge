@@ -68,7 +68,7 @@ Use the same immutable release tag as the Unity package. This is the supported f
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.5#subdirectory=Server",
+        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.6#subdirectory=Server",
         "mcp-for-unity",
         "--transport",
         "stdio"
@@ -78,7 +78,7 @@ Use the same immutable release tag as the Unity package. This is the supported f
 }
 ```
 
-For development snapshots, replace `v10.2.5` with `optimize/bridge` in both the server source and Unity package URL. Moving-branch installations are not reproducible and can change without notice.
+For development snapshots, replace `v10.2.6` with `optimize/bridge` in both the server source and Unity package URL. Moving-branch installations are not reproducible and can change without notice.
 
 ### Option 3: Upstream Docker image (not the fork)
 

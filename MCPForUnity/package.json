@@ -1,6 +1,6 @@
 {
   "name": "com.coplaydev.unity-mcp",
-  "version": "10.2.5",
+  "version": "10.2.6",
   "displayName": "MCP for Unity",
   "description": "UnityMCPBridge connects AI assistants to Unity through the Model Context Protocol. This personally maintained fork adds runtime UI interaction, durable command receipts, administrative recovery, and stronger Editor-readiness handling.",
   "unity": "6000.0",

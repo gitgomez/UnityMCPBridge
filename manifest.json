@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "UnityMCPBridge",
-  "version": "10.2.5",
+  "version": "10.2.6",
   "description": "Personally maintained MCP bridge fork for Unity Editor automation, runtime UI interaction, and durable command handling",
   "author": {
     "name": "Gomez",
@@ -22,7 +22,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.5#subdirectory=Server",
+        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.6#subdirectory=Server",
         "mcp-for-unity"
       ],
       "env": {}
