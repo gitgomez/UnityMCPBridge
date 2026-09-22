@@ -58,19 +58,33 @@ release authority.
 
 ### 2. Promote the verified commit to `main`
 
-Create a pull request from `optimize/bridge` to `main`. Do not add version changes during promotion. Use the rebase merge strategy rather than a GitHub-generated merge or squash commit; this preserves the reviewed commit authors and avoids adding a separate maintainer identity to the release history. The tree that reaches `main` must be the same tested bridge revision on both sides of the package/server boundary.
+Create a pull request from `optimize/bridge` to `main` and wait for its checks.
+Do not add version changes during promotion, and do not use the GitHub merge
+button for maintainer releases. GitHub-generated rebase commits can replace the
+verified committer identity with an account address. After the checks pass,
+fast-forward `main` to the exact tested commit without rewriting it:
 
-After merge, verify:
+```bash
+git fetch origin main optimize/bridge
+git merge-base --is-ancestor origin/main <release-commit>
+git push origin <release-commit>:main
+```
+
+If the ancestry check fails or `main` changed unexpectedly, stop and reconcile
+the branches before promotion. The tree that reaches `main` must be the same
+tested bridge revision on both sides of the package/server boundary.
+
+After promotion, verify:
 
 ```bash
 git fetch origin main
 git diff --exit-code origin/optimize/bridge origin/main
-git log --format='%h %an <%ae>' <previous-release>..origin/main
+git log --format='%h author:%an <%ae> committer:%cn <%ce>' <previous-release>..origin/main
 ```
 
-Confirm that maintainer-authored commits use the approved GitHub noreply
-address. If development has already continued on `optimize/bridge`, compare
-`main` with the exact release commit instead of the branch tip.
+Confirm that both author and committer use the approved GitHub noreply address.
+If development has already continued on `optimize/bridge`, compare `main` with
+the exact release commit instead of the branch tip.
 
 ### 3. Create and push the annotated tag
 

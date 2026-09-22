@@ -68,3 +68,13 @@ def test_public_contribution_policy_keeps_unity_credentials_local() -> None:
     assert "Do not upload Unity credentials to GitHub for CI." in contributing
     assert "publishes version tags." in contributing
     assert "does not store Unity account or license credentials in GitHub" in releases
+
+
+def test_release_promotion_preserves_verified_noreply_commits() -> None:
+    releases = (REPO_ROOT / "docs" / "contributing" / "releases.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "do not use the GitHub merge" in releases
+    assert "git push origin <release-commit>:main" in releases
+    assert "committer:%cn <%ce>" in releases
