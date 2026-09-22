@@ -100,13 +100,13 @@ differences in detail.
 In Unity, open **Window → Package Manager → Add package from git URL** and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.6
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.7
 ```
 
 The package selects the matching server source:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.6#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.7#subdirectory=Server
 ```
 
 Do not mix a fork package with the upstream PyPI server. Keep both URLs on the

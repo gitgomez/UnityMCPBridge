@@ -15,7 +15,7 @@ This fork is not affiliated with, sponsored by, endorsed by, or supported by Uni
 In Unity, open **Window → Package Manager**, select **Add package from git URL...**, and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.6
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.7
 ```
 
 The release tag is immutable and is the public installation contract. Do not replace it with `main` if you need a reproducible installation.
@@ -26,10 +26,10 @@ If the repository is private, Git must already have credentials that allow Unity
 
 Installing the Unity package alone is not enough, but the fork package now derives its matching GitHub server source automatically. It never falls back to the published upstream Python package, which does not contain fork-only commands.
 
-Leave **Server Source Override** empty for a stable release. The default source for `v10.2.6` is:
+Leave **Server Source Override** empty for a stable release. The default source for `v10.2.7` is:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.6#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.7#subdirectory=Server
 ```
 
 For a local development checkout, set **Server Source Override** to:
