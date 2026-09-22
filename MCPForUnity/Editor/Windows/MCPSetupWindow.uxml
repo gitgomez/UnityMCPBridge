@@ -3,7 +3,7 @@
     <Style src="MCPSetupWindow.uss" />
     <ui:ScrollView name="root-container" mode="Vertical">
         <ui:VisualElement name="setup-header" class="setup-header">
-            <!-- OceanMark logo is injected here at index 0 in CreateGUI -->
+            <!-- UnityMcpBridgeLogo is injected here at index 0 in CreateGUI -->
             <ui:Label text="MCP for Unity Setup" name="title" class="title" />
         </ui:VisualElement>
 

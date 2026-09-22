@@ -72,11 +72,11 @@ namespace MCPForUnity.Editor.Windows
 
             visualTree.CloneTree(rootVisualElement);
 
-            // Embed the Ocean brand mark beside the title
+            // Embed the UnityMCPBridge cube logo beside the title
             var setupHeader = rootVisualElement.Q<VisualElement>("setup-header");
-            if (setupHeader != null && setupHeader.Q<OceanMark>() == null)
+            if (setupHeader != null && setupHeader.Q<UnityMcpBridgeLogo>() == null)
             {
-                var logo = new OceanMark { name = "setup-logo" };
+                var logo = new UnityMcpBridgeLogo { name = "setup-logo" };
                 logo.AddToClassList("setup-logo");
                 setupHeader.Insert(0, logo);
             }

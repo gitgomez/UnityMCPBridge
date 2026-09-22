@@ -1,4 +1,8 @@
-# UnityMCPBridge
+<p align="center">
+  <img src="MCPForUnity/package-icon.png" alt="UnityMCPBridge MCP cube logo" width="128">
+</p>
+
+<h1 align="center">UnityMCPBridge</h1>
 
 **A personal Unity 6 bridge for dependable, inspectable agent automation.**
 
@@ -37,6 +41,11 @@ fork. That work is used under the MIT License and deserves direct credit.
 This repository is an independent continuation, not an official CoplayDev
 release channel. Fork-specific questions and bugs belong here; they should not
 be redirected to CoplayDev as support requests.
+
+The graphite MCP cube with purple and orange edges is the independent
+UnityMCPBridge project mark. It replaces upstream branding in the package and
+Editor windows; the upstream project remains prominently credited for the
+technical foundation.
 
 ## Why this fork exists
 
