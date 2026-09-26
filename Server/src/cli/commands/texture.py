@@ -15,50 +15,13 @@ from cli.utils.connection import run_command, handle_unity_errors
 from cli.utils.parsers import parse_json_or_exit as try_parse_json
 
 
-_TEXTURE_TYPES = {
-    "default": "Default",
-    "normal_map": "NormalMap",
-    "editor_gui": "GUI",
-    "sprite": "Sprite",
-    "cursor": "Cursor",
-    "cookie": "Cookie",
-    "lightmap": "Lightmap",
-    "directional_lightmap": "DirectionalLightmap",
-    "shadow_mask": "Shadowmask",
-    "single_channel": "SingleChannel",
-}
-
-_TEXTURE_SHAPES = {"2d": "Texture2D", "cube": "TextureCube"}
-
-_ALPHA_SOURCES = {
-    "none": "None",
-    "from_input": "FromInput",
-    "from_gray_scale": "FromGrayScale",
-}
-
-_WRAP_MODES = {
-    "repeat": "Repeat",
-    "clamp": "Clamp",
-    "mirror": "Mirror",
-    "mirror_once": "MirrorOnce",
-}
-
-_FILTER_MODES = {"point": "Point",
-                 "bilinear": "Bilinear", "trilinear": "Trilinear"}
-
-_COMPRESSIONS = {
-    "none": "Uncompressed",
-    "low_quality": "CompressedLQ",
-    "normal_quality": "Compressed",
-    "high_quality": "CompressedHQ",
-}
-
-_SPRITE_MODES = {"single": "Single",
-                 "multiple": "Multiple", "polygon": "Polygon"}
-
-_SPRITE_MESH_TYPES = {"full_rect": "FullRect", "tight": "Tight"}
-
-_MIPMAP_FILTERS = {"box": "BoxFilter", "kaiser": "KaiserFilter"}
+from services.tools.texture_import_settings import (
+    TEXTURE_TYPES as _TEXTURE_TYPES,
+    SPRITE_MODES as _SPRITE_MODES,
+    COMPRESSIONS as _COMPRESSIONS,
+    NPOT_SCALES,
+    normalize_import_settings,
+)
 
 _MAX_TEXTURE_DIMENSION = 1024
 _MAX_TEXTURE_PIXELS = 1024 * 1024
@@ -222,109 +185,13 @@ def _normalize_set_pixels(value: Any) -> dict[str, Any]:
     return result
 
 
-def _map_enum(value: Any, mapping: dict[str, str]) -> Any:
-    if isinstance(value, str):
-        key = value.lower()
-        return mapping.get(key, value)
-    return value
-
-
-_TRUE_STRINGS = {"true", "1", "yes", "on"}
-_FALSE_STRINGS = {"false", "0", "no", "off"}
-
-
-def _coerce_bool(value: Any, name: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)) and value in (0, 1, 0.0, 1.0):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in _TRUE_STRINGS:
-            return True
-        if lowered in _FALSE_STRINGS:
-            return False
-    raise ValueError(f"{name} must be a boolean")
-
-
 def _normalize_import_settings(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {}
     if isinstance(value, str):
         value = try_parse_json(value, "import_settings")
-    if not isinstance(value, dict):
-        raise ValueError("import_settings must be a JSON object")
-
-    result: dict[str, Any] = {}
-
-    if "texture_type" in value:
-        result["textureType"] = _map_enum(
-            value["texture_type"], _TEXTURE_TYPES)
-    if "texture_shape" in value:
-        result["textureShape"] = _map_enum(
-            value["texture_shape"], _TEXTURE_SHAPES)
-
-    for snake, camel in [
-        ("srgb", "sRGBTexture"),
-        ("alpha_is_transparency", "alphaIsTransparency"),
-        ("readable", "isReadable"),
-        ("generate_mipmaps", "mipmapEnabled"),
-        ("compression_crunched", "crunchedCompression"),
-    ]:
-        if snake in value:
-            result[camel] = _coerce_bool(value[snake], snake)
-
-    if "alpha_source" in value:
-        result["alphaSource"] = _map_enum(
-            value["alpha_source"], _ALPHA_SOURCES)
-
-    for snake, camel in [("wrap_mode", "wrapMode"), ("wrap_mode_u", "wrapModeU"), ("wrap_mode_v", "wrapModeV")]:
-        if snake in value:
-            result[camel] = _map_enum(value[snake], _WRAP_MODES)
-
-    if "filter_mode" in value:
-        result["filterMode"] = _map_enum(value["filter_mode"], _FILTER_MODES)
-    if "mipmap_filter" in value:
-        result["mipmapFilter"] = _map_enum(
-            value["mipmap_filter"], _MIPMAP_FILTERS)
-    if "compression" in value:
-        result["textureCompression"] = _map_enum(
-            value["compression"], _COMPRESSIONS)
-
-    if "aniso_level" in value:
-        result["anisoLevel"] = int(value["aniso_level"])
-    if "max_texture_size" in value:
-        result["maxTextureSize"] = int(value["max_texture_size"])
-    if "compression_quality" in value:
-        result["compressionQuality"] = int(value["compression_quality"])
-
-    if "sprite_mode" in value:
-        result["spriteImportMode"] = _map_enum(
-            value["sprite_mode"], _SPRITE_MODES)
-    if "sprite_pixels_per_unit" in value:
-        result["spritePixelsPerUnit"] = float(value["sprite_pixels_per_unit"])
-    if "sprite_pivot" in value:
-        result["spritePivot"] = value["sprite_pivot"]
-    if "sprite_mesh_type" in value:
-        result["spriteMeshType"] = _map_enum(
-            value["sprite_mesh_type"], _SPRITE_MESH_TYPES)
-    if "sprite_extrude" in value:
-        result["spriteExtrude"] = int(value["sprite_extrude"])
-
-    for key, val in value.items():
-        if key in result:
-            continue
-        if key in (
-            "textureType", "textureShape", "sRGBTexture", "alphaSource",
-            "alphaIsTransparency", "isReadable", "mipmapEnabled", "wrapMode",
-            "wrapModeU", "wrapModeV", "filterMode", "mipmapFilter", "anisoLevel",
-            "maxTextureSize", "textureCompression", "crunchedCompression",
-            "compressionQuality", "spriteImportMode", "spritePixelsPerUnit",
-            "spritePivot", "spriteMeshType", "spriteExtrude",
-        ):
-            result[key] = val
-
-    return result
+    settings, error = normalize_import_settings(value)
+    if error:
+        raise ValueError(error)
+    return settings or {}
 
 
 @click.group()
@@ -495,6 +362,7 @@ def _build_import_settings_from_flags(
     generate_mipmaps: Optional[bool],
     srgb: Optional[bool],
     readable: Optional[bool],
+    npot_scale: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build importSettings dict from CLI flags. Returns empty dict if no flags set."""
     import_settings: dict[str, Any] = {}
@@ -514,7 +382,9 @@ def _build_import_settings_from_flags(
         import_settings["sRGBTexture"] = srgb
     if readable is not None:
         import_settings["isReadable"] = readable
-    return import_settings
+    if npot_scale is not None:
+        import_settings["npotScale"] = npot_scale
+    return _normalize_import_settings(import_settings)
 
 
 def _apply_import_flags_to_params(
@@ -528,10 +398,13 @@ def _apply_import_flags_to_params(
     srgb: Optional[bool],
     readable: Optional[bool],
     as_sprite: bool,
+    import_settings: Optional[str] = None,
+    npot_scale: Optional[str] = None,
 ) -> bool:
     """Validate and apply import-setting flags to params dict. Returns True if any import setting present."""
     has_other_flags = any(v is not None for v in (
-        texture_type, sprite_mode, sprite_ppu, max_size, compression, generate_mipmaps, srgb, readable))
+        texture_type, sprite_mode, sprite_ppu, max_size, compression, generate_mipmaps, srgb, readable,
+        import_settings, npot_scale))
 
     if as_sprite:
         if has_other_flags:
@@ -541,12 +414,21 @@ def _apply_import_flags_to_params(
         return True
 
     if has_other_flags:
-        import_settings = _build_import_settings_from_flags(
-            texture_type, sprite_mode, sprite_ppu, max_size, compression,
-            generate_mipmaps, srgb, readable)
-        if import_settings:
-            params["importSettings"] = import_settings
-        return True
+        try:
+            settings = _normalize_import_settings(import_settings)
+            flags = _build_import_settings_from_flags(
+                texture_type, sprite_mode, sprite_ppu, max_size, compression,
+                generate_mipmaps, srgb, readable, npot_scale)
+            for key, value in flags.items():
+                if key in settings and settings[key] != value:
+                    raise ValueError(f"Conflicting import_settings and flag values for {key}")
+            settings.update(flags)
+        except ValueError as exc:
+            print_error(str(exc))
+            sys.exit(1)
+        if settings:
+            params["importSettings"] = settings
+        return bool(settings)
 
     return False
 
@@ -554,6 +436,8 @@ def _apply_import_flags_to_params(
 @texture.command("modify")
 @click.argument("path")
 @click.option("--set-pixels", default=None, help="Modification args as JSON")
+@click.option("--import-settings", default=None, help="Importer settings JSON; snake_case or Unity property names")
+@click.option("--npot-scale", type=click.Choice(list(NPOT_SCALES)), help="Non-power-of-two texture scaling")
 @click.option("--texture-type", type=click.Choice(list(_TEXTURE_TYPES.keys())), help="Texture type")
 @click.option("--sprite-mode", type=click.Choice(list(_SPRITE_MODES.keys())), help="Sprite import mode")
 @click.option("--sprite-ppu", type=float, help="Sprite pixels per unit")
@@ -567,7 +451,7 @@ def _apply_import_flags_to_params(
 def modify(path: str, set_pixels: Optional[str], texture_type: Optional[str], sprite_mode: Optional[str],
            sprite_ppu: Optional[float], max_size: Optional[str], compression: Optional[str],
            generate_mipmaps: Optional[bool], srgb: Optional[bool], readable: Optional[bool],
-           as_sprite: bool):
+           as_sprite: bool, import_settings: Optional[str], npot_scale: Optional[str]):
     """Modify an existing texture.
 
     \b
@@ -583,7 +467,7 @@ def modify(path: str, set_pixels: Optional[str], texture_type: Optional[str], sp
 
     has_import = _apply_import_flags_to_params(
         params, texture_type, sprite_mode, sprite_ppu, max_size,
-        compression, generate_mipmaps, srgb, readable, as_sprite)
+        compression, generate_mipmaps, srgb, readable, as_sprite, import_settings, npot_scale)
 
     if set_pixels is not None:
         try:
@@ -631,6 +515,8 @@ def delete(path: str, force: bool):
 
 @texture.command("set-import-settings")
 @click.argument("path")
+@click.option("--import-settings", default=None, help="Importer settings JSON; snake_case or Unity property names")
+@click.option("--npot-scale", type=click.Choice(list(NPOT_SCALES)), help="Non-power-of-two texture scaling")
 @click.option("--texture-type", type=click.Choice(list(_TEXTURE_TYPES.keys())), help="Texture type")
 @click.option("--sprite-mode", type=click.Choice(list(_SPRITE_MODES.keys())), help="Sprite import mode")
 @click.option("--sprite-ppu", type=float, help="Sprite pixels per unit")
@@ -644,7 +530,8 @@ def delete(path: str, force: bool):
 def set_import_settings(path: str, texture_type: Optional[str], sprite_mode: Optional[str],
                         sprite_ppu: Optional[float], max_size: Optional[str],
                         compression: Optional[str], generate_mipmaps: Optional[bool],
-                        srgb: Optional[bool], readable: Optional[bool], as_sprite: bool):
+                        srgb: Optional[bool], readable: Optional[bool], as_sprite: bool,
+                        import_settings: Optional[str], npot_scale: Optional[str]):
     """Change import settings on an existing texture.
 
     \b
@@ -660,7 +547,7 @@ def set_import_settings(path: str, texture_type: Optional[str], sprite_mode: Opt
 
     has_import = _apply_import_flags_to_params(
         params, texture_type, sprite_mode, sprite_ppu, max_size,
-        compression, generate_mipmaps, srgb, readable, as_sprite)
+        compression, generate_mipmaps, srgb, readable, as_sprite, import_settings, npot_scale)
 
     if not has_import:
         print_error("At least one import setting must be specified")

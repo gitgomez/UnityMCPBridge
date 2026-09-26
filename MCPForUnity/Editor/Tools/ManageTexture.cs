@@ -19,6 +19,15 @@ namespace MCPForUnity.Editor.Tools
         private const int MaxTextureDimension = 1024;
         private const int MaxTexturePixels = 1024 * 1024;
         private const int MaxNoiseWork = 4000000;
+        private static readonly HashSet<string> ImportSettingNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "textureType", "textureShape", "sRGBTexture", "alphaSource",
+            "alphaIsTransparency", "isReadable", "mipmapEnabled", "mipmapFilter",
+            "wrapMode", "wrapModeU", "wrapModeV", "filterMode", "anisoLevel",
+            "maxTextureSize", "textureCompression", "crunchedCompression",
+            "compressionQuality", "spriteImportMode", "spritePixelsPerUnit",
+            "spritePivot", "spriteMeshType", "spriteExtrude", "npotScale"
+        };
         private static readonly List<string> ValidActions = new List<string>
         {
             "create",
@@ -116,6 +125,8 @@ namespace MCPForUnity.Editor.Tools
             }
 
             string fullPath = AssetPathUtility.SanitizeAssetPath(path);
+            var importValidationError = ValidateImportSettingsParams(@params);
+            if (importValidationError != null) return importValidationError;
             EnsureDirectoryExists(fullPath);
 
             try
@@ -746,11 +757,29 @@ namespace MCPForUnity.Editor.Tools
             {
                 return new ErrorResponse("Cannot specify both 'import_settings' and 'as_sprite'.");
             }
+            if (importSettingsToken != null)
+            {
+                if (!(importSettingsToken is JObject settings))
+                    return new ErrorResponse("'import_settings' must be an object.");
+                foreach (var property in settings.Properties())
+                {
+                    if (!ImportSettingNames.Contains(property.Name))
+                        return new ErrorResponse($"Unsupported import_settings key: {property.Name}");
+                }
+                var npotToken = settings["npotScale"];
+                if (npotToken != null &&
+                    (npotToken.Type != JTokenType.String ||
+                     !TryParseEnum<TextureImporterNPOTScale>(npotToken.ToString(), out var npotScale) ||
+                     !Enum.IsDefined(typeof(TextureImporterNPOTScale), npotScale)))
+                    return new ErrorResponse("Invalid npotScale. Use None, ToNearest, ToLarger, or ToSmaller.");
+            }
             return null;
         }
 
         private static object ApplyImportSettingsParams(string fullPath, JObject @params)
         {
+            var validationError = ValidateImportSettingsParams(@params);
+            if (validationError != null) return validationError;
             JToken importSettingsToken = @params["import_settings"] ?? @params["importSettings"];
             JToken asSpriteToken = @params["as_sprite"] ?? @params["spriteSettings"];
 
@@ -986,6 +1015,11 @@ namespace MCPForUnity.Editor.Tools
             {
                 importer.maxTextureSize = maxSizeToken.ToObject<int>();
             }
+
+            var npotScaleToken = settings["npotScale"];
+            if (npotScaleToken != null)
+                importer.npotScale = (TextureImporterNPOTScale)Enum.Parse(
+                    typeof(TextureImporterNPOTScale), npotScaleToken.ToString(), true);
 
             // Compression
             var compressionToken = settings["textureCompression"];

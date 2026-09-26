@@ -1,10 +1,24 @@
-# Unity MCP Feature Roadmap 2026
+# Historical upstream feature research (March 2026)
+
+Status: historical reference, not the UnityMCPBridge backlog.
+
+This research snapshot predates the current fork. Its tool counts, priorities,
+missing-feature claims, estimates, and proposed actions describe that earlier
+snapshot and must not be read as current status or delivery commitments.
+Several listed tools are already implemented.
+
+For current direction, read [Project direction](project-roadmap.md). For the
+implemented tool inventory, use the generated
+[tool reference](../reference/tools/index.md) and
+[contract index](../../unity-mcp-skill/references/tool-contract-index.md).
+Current operational boundaries and known defects are maintained in
+[Capabilities and limitations](../../unity-mcp-skill/references/capabilities-and-limitations.md).
 
 ## Research Summary
 
 Six parallel research agents investigated 12+ domains across Unity's API surface. Every domain was assessed for: API stability, implementation complexity, developer value, dead ends, and dependencies.
 
-### Current Tool Coverage (19 tools)
+### Tool coverage in the original research snapshot (19 tools)
 Animation, Asset, Audio, Camera, Components, Editor, GameObjects, Graphics, Lighting, Material, Prefabs, ProBuilder, Scene, Script, ScriptableObject, Shader, Texture, UI, VFX
 
 ---

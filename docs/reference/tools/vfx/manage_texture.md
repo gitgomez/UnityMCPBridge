@@ -6,7 +6,7 @@
 
 ## Description
 
-Procedural texture generation for Unity. Creates textures with solid fills, patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, set_import_settings
+Procedural texture generation for Unity. Creates textures with solid fills, patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, set_import_settings. Import settings accept documented snake_case keys or Unity property names, including npot_scale/npotScale. Unsupported or conflicting settings fail before dispatch.
 
 ## Parameters
 
@@ -28,7 +28,7 @@ Procedural texture generation for Unity. Creates textures with solid fills, patt
 | `octaves` | `int \| None` | — | Number of noise octaves for detail (default: 1) |
 | `set_pixels` | `dict \| None` | — | Region to modify: {x, y, width, height, color or pixels} |
 | `as_sprite` | `dict \| bool \| None` | — | Configure as sprite: {pivot: [x,y], pixels_per_unit: 100} or true for defaults |
-| `import_settings` | `dict \| None` | — | TextureImporter settings dict. Keys: texture_type (default/normal_map/sprite/etc), texture_shape (2d/cube), srgb (bool), alpha_source (none/from_input/from_gray_scale), alpha_is_transparency (bool), readable (bool), generate_mipmaps (bool), wrap_mode/wrap_mode_u/wrap_mode_v (repeat/clamp/mirror/mirror_once), filter_mode (point/bilinear/trilinear), aniso_level (0-16), max_texture_size (32-16384), compression (none/low_quality/normal_quality/high_quality), compression_quality (0-100), sprite_mode (single/multiple/polygon), sprite_pixels_per_unit, sprite_pivot, sprite_mesh_type (full_rect/tight), sprite_extrude (0-32) |
+| `import_settings` | `dict \| None` | — | TextureImporter settings dict. Keys: texture_type (default/normal_map/sprite/etc), texture_shape (2d/cube), srgb (bool), alpha_source (none/from_input/from_gray_scale), alpha_is_transparency (bool), readable (bool), generate_mipmaps (bool), wrap_mode/wrap_mode_u/wrap_mode_v (repeat/clamp/mirror/mirror_once), filter_mode (point/bilinear/trilinear), aniso_level (0-16), max_texture_size (32-16384), compression (none/low_quality/normal_quality/high_quality), compression_quality (0-100), sprite_mode (single/multiple/polygon), sprite_pixels_per_unit, sprite_pivot, sprite_mesh_type (full_rect/tight), sprite_extrude (0-32), npot_scale (none/to_nearest/to_larger/to_smaller). Corresponding Unity property names are also accepted, e.g. textureType, sRGBTexture, npotScale. Unknown keys and conflicting aliases are rejected. |
 
 ## Returns
 

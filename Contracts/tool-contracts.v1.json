@@ -8465,7 +8465,7 @@
     },
     {
       "name": "manage_texture",
-      "description": "Procedural texture generation for Unity. Creates textures with solid fills, patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, set_import_settings",
+      "description": "Procedural texture generation for Unity. Creates textures with solid fills, patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, set_import_settings. Import settings accept documented snake_case keys or Unity property names, including npot_scale/npotScale. Unsupported or conflicting settings fail before dispatch.",
       "group": "vfx",
       "unity_target": "manage_texture",
       "input_schema": {

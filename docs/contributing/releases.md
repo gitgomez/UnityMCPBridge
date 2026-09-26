@@ -47,8 +47,8 @@ release authority.
 3. Synchronize every release-owned version and install URL:
 
    ```bash
-   python tools/update_versions.py --version 10.2.7
-   python tools/update_versions.py --check --version 10.2.7
+   python tools/update_versions.py --version 10.2.8
+   python tools/update_versions.py --check --version 10.2.8
    ```
 
 4. Review the complete diff and run the smallest applicable local checks, including Python tests, release-tool tests, documentation build, and Unity tests when Unity code changed.
@@ -91,9 +91,9 @@ the exact release commit instead of the branch tip.
 Tag the promoted `main` commit, not a later development commit:
 
 ```bash
-git tag -a v10.2.7 <release-commit> -m "UnityMCPBridge v10.2.7"
-git show --no-patch --decorate v10.2.7
-git push origin v10.2.7
+git tag -a v10.2.8 <release-commit> -m "UnityMCPBridge v10.2.8"
+git show --no-patch --decorate v10.2.8
+git push origin v10.2.8
 ```
 
 Pushing the tag starts `.github/workflows/release.yml`. The workflow rejects:
@@ -112,8 +112,8 @@ release and has no PyPI, Docker, or MCPB publishing job.
 Confirm the tag and GitHub Release exist, then verify both immutable sources resolve:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.7
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.7#subdirectory=Server
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.8
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.8#subdirectory=Server
 ```
 
 Import the Unity package through Package Manager and verify that the default server source resolves to the matching tag without an override. Live capability discovery and a representative connected-Editor path are the final runtime proof; a successful clone or workflow alone is not.
@@ -129,7 +129,7 @@ The moving `optimize/bridge` branch may be used by contributors who explicitly w
 Delete it locally and recreate it on the intended commit:
 
 ```bash
-git tag -d v10.2.7
+git tag -d v10.2.8
 ```
 
 ### The tag was pushed or a GitHub Release exists

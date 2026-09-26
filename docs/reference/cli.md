@@ -91,6 +91,23 @@ mcp-for-unity scene load --help
 
 The help text is the authoritative per-command reference — flags, choices, and defaults all live there because the CLI is built on Click and self-describes.
 
+## Texture import settings
+
+Starting with `v10.2.8`, `texture create`, `texture modify`, and
+`texture set-import-settings` accept `--import-settings` JSON using documented
+snake_case names or corresponding Unity property names. All three use the same
+validation as the MCP tool. Unknown settings, invalid values, and conflicting
+aliases or JSON/flag values fail before dispatch.
+
+```bash
+unity-mcp texture set-import-settings Assets/Textures/Belt.png --import-settings '{"textureType":"Default","wrapMode":"Clamp","mipmapEnabled":false,"isReadable":false,"npotScale":"None"}'
+unity-mcp texture modify Assets/Textures/Belt.png --npot-scale none --no-mipmaps --no-readable
+```
+
+The Unity package and server must both use `v10.2.8` or later.
+See [texture import settings](../../unity-mcp-skill/references/capabilities-and-limitations.md#texture-import-settings)
+for alias and verification details.
+
 ## Runtime UI commands
 
 The `editor` group exposes deterministic Play Mode interaction for both uGUI and UI Toolkit:

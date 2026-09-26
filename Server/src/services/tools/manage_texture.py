@@ -10,7 +10,8 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.utils import parse_json_payload, coerce_bool, coerce_int, normalize_color
+from services.tools.utils import parse_json_payload, coerce_int, normalize_color
+from services.tools.texture_import_settings import normalize_import_settings as _normalize_import_settings
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 from services.tools.preflight import preflight
@@ -145,241 +146,15 @@ def _normalize_sprite_settings(value: Any) -> tuple[dict | None, str | None]:
     return None, f"as_sprite must be a dict or boolean, got {type(value).__name__}"
 
 
-# Valid values for import settings enums
-_TEXTURE_TYPES = {
-    "default": "Default",
-    "normal_map": "NormalMap",
-    "editor_gui": "GUI",
-    "sprite": "Sprite",
-    "cursor": "Cursor",
-    "cookie": "Cookie",
-    "lightmap": "Lightmap",
-    "directional_lightmap": "DirectionalLightmap",
-    "shadow_mask": "Shadowmask",
-    "single_channel": "SingleChannel",
-}
-
-_TEXTURE_SHAPES = {"2d": "Texture2D", "cube": "TextureCube"}
-
-_ALPHA_SOURCES = {
-    "none": "None",
-    "from_input": "FromInput",
-    "from_gray_scale": "FromGrayScale",
-}
-
-_WRAP_MODES = {
-    "repeat": "Repeat",
-    "clamp": "Clamp",
-    "mirror": "Mirror",
-    "mirror_once": "MirrorOnce",
-}
-
-_FILTER_MODES = {"point": "Point", "bilinear": "Bilinear", "trilinear": "Trilinear"}
-
-_COMPRESSIONS = {
-    "none": "Uncompressed",
-    "low_quality": "CompressedLQ",
-    "normal_quality": "Compressed",
-    "high_quality": "CompressedHQ",
-}
-
-_SPRITE_MODES = {"single": "Single", "multiple": "Multiple", "polygon": "Polygon"}
-
-_SPRITE_MESH_TYPES = {"full_rect": "FullRect", "tight": "Tight"}
-
-_MIPMAP_FILTERS = {"box": "BoxFilter", "kaiser": "KaiserFilter"}
-
-
-def _normalize_bool_setting(value: Any, name: str) -> tuple[bool | None, str | None]:
-    """
-    Normalize boolean settings.
-    Returns (bool_value, error_message).
-    """
-    if value is None:
-        return None, None
-
-    if isinstance(value, bool):
-        return value, None
-
-    if isinstance(value, (int, float)):
-        if value in (0, 1, 0.0, 1.0):
-            return bool(value), None
-        return None, f"{name} must be a boolean"
-
-    if isinstance(value, str):
-        coerced = coerce_bool(value, default=None)
-        if coerced is None:
-            return None, f"{name} must be a boolean"
-        return coerced, None
-
-    return None, f"{name} must be a boolean"
-
-
-def _normalize_import_settings(value: Any) -> tuple[dict | None, str | None]:
-    """
-    Normalize TextureImporter settings.
-    Converts snake_case keys to camelCase and validates enum values.
-    Returns (settings, error_message).
-    """
-    if value is None:
-        return None, None
-
-    if isinstance(value, str):
-        value = parse_json_payload(value)
-
-    if not isinstance(value, dict):
-        return None, f"import_settings must be a dict, got {type(value).__name__}"
-
-    result = {}
-
-    # Texture type
-    if "texture_type" in value:
-        tt = value["texture_type"].lower() if isinstance(value["texture_type"], str) else value["texture_type"]
-        if tt not in _TEXTURE_TYPES:
-            return None, f"Invalid texture_type '{tt}'. Valid: {list(_TEXTURE_TYPES.keys())}"
-        result["textureType"] = _TEXTURE_TYPES[tt]
-
-    # Texture shape
-    if "texture_shape" in value:
-        ts = value["texture_shape"].lower() if isinstance(value["texture_shape"], str) else value["texture_shape"]
-        if ts not in _TEXTURE_SHAPES:
-            return None, f"Invalid texture_shape '{ts}'. Valid: {list(_TEXTURE_SHAPES.keys())}"
-        result["textureShape"] = _TEXTURE_SHAPES[ts]
-
-    # Boolean settings
-    for snake, camel in [
-        ("srgb", "sRGBTexture"),
-        ("alpha_is_transparency", "alphaIsTransparency"),
-        ("readable", "isReadable"),
-        ("generate_mipmaps", "mipmapEnabled"),
-        ("compression_crunched", "crunchedCompression"),
-    ]:
-        if snake in value:
-            bool_value, bool_error = _normalize_bool_setting(value[snake], snake)
-            if bool_error:
-                return None, bool_error
-            if bool_value is not None:
-                result[camel] = bool_value
-
-    # Alpha source
-    if "alpha_source" in value:
-        alpha = value["alpha_source"].lower() if isinstance(value["alpha_source"], str) else value["alpha_source"]
-        if alpha not in _ALPHA_SOURCES:
-            return None, f"Invalid alpha_source '{alpha}'. Valid: {list(_ALPHA_SOURCES.keys())}"
-        result["alphaSource"] = _ALPHA_SOURCES[alpha]
-
-    # Wrap modes
-    for snake, camel in [("wrap_mode", "wrapMode"), ("wrap_mode_u", "wrapModeU"), ("wrap_mode_v", "wrapModeV")]:
-        if snake in value:
-            wm = value[snake].lower() if isinstance(value[snake], str) else value[snake]
-            if wm not in _WRAP_MODES:
-                return None, f"Invalid {snake} '{wm}'. Valid: {list(_WRAP_MODES.keys())}"
-            result[camel] = _WRAP_MODES[wm]
-
-    # Filter mode
-    if "filter_mode" in value:
-        fm = value["filter_mode"].lower() if isinstance(value["filter_mode"], str) else value["filter_mode"]
-        if fm not in _FILTER_MODES:
-            return None, f"Invalid filter_mode '{fm}'. Valid: {list(_FILTER_MODES.keys())}"
-        result["filterMode"] = _FILTER_MODES[fm]
-
-    # Mipmap filter
-    if "mipmap_filter" in value:
-        mf = value["mipmap_filter"].lower() if isinstance(value["mipmap_filter"], str) else value["mipmap_filter"]
-        if mf not in _MIPMAP_FILTERS:
-            return None, f"Invalid mipmap_filter '{mf}'. Valid: {list(_MIPMAP_FILTERS.keys())}"
-        result["mipmapFilter"] = _MIPMAP_FILTERS[mf]
-
-    # Compression
-    if "compression" in value:
-        comp = value["compression"].lower() if isinstance(value["compression"], str) else value["compression"]
-        if comp not in _COMPRESSIONS:
-            return None, f"Invalid compression '{comp}'. Valid: {list(_COMPRESSIONS.keys())}"
-        result["textureCompression"] = _COMPRESSIONS[comp]
-
-    # Integer settings
-    if "aniso_level" in value:
-        raw = value["aniso_level"]
-        level = coerce_int(raw)
-        if level is None:
-            if raw is not None:
-                return None, f"aniso_level must be an integer, got {raw}"
-        else:
-            if not 0 <= level <= 16:
-                return None, f"aniso_level must be 0-16, got {level}"
-            result["anisoLevel"] = level
-
-    if "max_texture_size" in value:
-        raw = value["max_texture_size"]
-        size = coerce_int(raw)
-        if size is None:
-            if raw is not None:
-                return None, f"max_texture_size must be an integer, got {raw}"
-        else:
-            valid_sizes = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-            if size not in valid_sizes:
-                return None, f"max_texture_size must be one of {valid_sizes}, got {size}"
-            result["maxTextureSize"] = size
-
-    if "compression_quality" in value:
-        raw = value["compression_quality"]
-        quality = coerce_int(raw)
-        if quality is None:
-            if raw is not None:
-                return None, f"compression_quality must be an integer, got {raw}"
-        else:
-            if not 0 <= quality <= 100:
-                return None, f"compression_quality must be 0-100, got {quality}"
-            result["compressionQuality"] = quality
-
-    # Sprite-specific settings
-    if "sprite_mode" in value:
-        sm = value["sprite_mode"].lower() if isinstance(value["sprite_mode"], str) else value["sprite_mode"]
-        if sm not in _SPRITE_MODES:
-            return None, f"Invalid sprite_mode '{sm}'. Valid: {list(_SPRITE_MODES.keys())}"
-        result["spriteImportMode"] = _SPRITE_MODES[sm]
-
-    if "sprite_pixels_per_unit" in value:
-        raw = value["sprite_pixels_per_unit"]
-        try:
-            result["spritePixelsPerUnit"] = float(raw)
-        except (TypeError, ValueError):
-            return None, f"sprite_pixels_per_unit must be a number, got {raw}"
-
-    if "sprite_pivot" in value:
-        pivot = value["sprite_pivot"]
-        if isinstance(pivot, (list, tuple)) and len(pivot) == 2:
-            result["spritePivot"] = [float(pivot[0]), float(pivot[1])]
-        else:
-            return None, f"sprite_pivot must be [x, y], got {pivot}"
-
-    if "sprite_mesh_type" in value:
-        mt = value["sprite_mesh_type"].lower() if isinstance(value["sprite_mesh_type"], str) else value["sprite_mesh_type"]
-        if mt not in _SPRITE_MESH_TYPES:
-            return None, f"Invalid sprite_mesh_type '{mt}'. Valid: {list(_SPRITE_MESH_TYPES.keys())}"
-        result["spriteMeshType"] = _SPRITE_MESH_TYPES[mt]
-
-    if "sprite_extrude" in value:
-        raw = value["sprite_extrude"]
-        extrude = coerce_int(raw)
-        if extrude is None:
-            if raw is not None:
-                return None, f"sprite_extrude must be an integer, got {raw}"
-        else:
-            if not 0 <= extrude <= 32:
-                return None, f"sprite_extrude must be 0-32, got {extrude}"
-            result["spriteExtrude"] = extrude
-
-    return result, None
-
-
 @mcp_for_unity_tool(
     group="vfx",
     description=(
         "Procedural texture generation for Unity. Creates textures with solid fills, "
         "patterns (checkerboard, stripes, dots, grid, brick), gradients, and noise. "
         "Actions: create, modify, delete, create_sprite, apply_pattern, apply_gradient, apply_noise, "
-        "set_import_settings"
+        "set_import_settings. Import settings accept documented snake_case keys or Unity "
+        "property names, including npot_scale/npotScale. Unsupported or conflicting "
+        "settings fail before dispatch."
     ),
     annotations=ToolAnnotations(
         title="Manage Texture",
@@ -459,7 +234,10 @@ async def manage_texture(
         "filter_mode (point/bilinear/trilinear), aniso_level (0-16), max_texture_size (32-16384), "
         "compression (none/low_quality/normal_quality/high_quality), compression_quality (0-100), "
         "sprite_mode (single/multiple/polygon), sprite_pixels_per_unit, sprite_pivot, "
-        "sprite_mesh_type (full_rect/tight), sprite_extrude (0-32)"] | None = None,
+        "sprite_mesh_type (full_rect/tight), sprite_extrude (0-32), "
+        "npot_scale (none/to_nearest/to_larger/to_smaller). Corresponding Unity "
+        "property names are also accepted, e.g. textureType, sRGBTexture, npotScale. "
+        "Unknown keys and conflicting aliases are rejected."] | None = None,
 
 ) -> dict[str, Any]:
     unity_instance = await get_unity_instance_from_context(ctx)
@@ -525,6 +303,10 @@ async def manage_texture(
     import_settings_normalized, import_error = _normalize_import_settings(import_settings)
     if import_error:
         return {"success": False, "message": import_error}
+    if import_settings_normalized is not None and sprite_settings is not None:
+        return {"success": False, "message": "Cannot specify both import_settings and as_sprite."}
+    if action_lower == "set_import_settings" and not import_settings_normalized and not sprite_settings:
+        return {"success": False, "message": "set_import_settings requires non-empty import_settings or as_sprite."}
 
     # Normalize set_pixels for modify action
     set_pixels_normalized = None

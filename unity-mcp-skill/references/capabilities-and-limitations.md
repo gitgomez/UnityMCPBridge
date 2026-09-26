@@ -73,6 +73,30 @@ Important boundaries:
 - Direct reflection and handler invocation can isolate a defect but do not prove
   the real input, UI, transport, or player path.
 
+### Texture import settings
+
+Starting with `v10.2.8`, the Bridge accepts documented snake_case keys and the corresponding
+Unity property names in `manage_texture.import_settings`. MCP and CLI use the
+same validation. Boolean `false` values are preserved. Unknown keys, invalid
+values, and conflicting aliases are rejected before command dispatch; equivalent
+aliases may be combined. Use matching Unity package and server versions.
+
+For example, `texture_type: "default"` and `textureType: "Default"` are equivalent.
+The same applies to `generate_mipmaps: false` / `mipmapEnabled: false`,
+`readable: false` / `isReadable: false`, and
+`compression: "none"` / `textureCompression: "Uncompressed"`.
+`npot_scale` / `npotScale` supports `none`, `to_nearest`, `to_larger`,
+`to_smaller`, or their Unity names `None`, `ToNearest`, `ToLarger`,
+`ToSmaller`.
+
+`set_import_settings` requires a non-empty settings dictionary or sprite settings.
+Texture creation, modification, and import-setting changes accept the same
+dictionary. The CLI exposes it as `--import-settings`; modify and
+set-import-settings also expose `--npot-scale`. Conflicting JSON and flag values
+are rejected. Read the generated [texture reference](../../docs/reference/tools/vfx/manage_texture.md)
+for the full supported field list. Verify the actual importer after a successful
+mutation.
+
 ## Play Mode UI automation
 
 `interact_play_mode` is the bounded runtime UI automation surface. Its declared

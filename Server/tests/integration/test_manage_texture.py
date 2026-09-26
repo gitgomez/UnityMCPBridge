@@ -275,3 +275,73 @@ class TestManageTextureIntegration:
 
         assert resp["success"] is False
         assert "positive" in resp["message"].lower()
+
+
+    @pytest.mark.parametrize("settings", [
+        {
+            "textureType": "Default", "sRGBTexture": True, "alphaSource": "FromInput",
+            "alphaIsTransparency": True, "wrapMode": "Clamp", "filterMode": "Bilinear",
+            "maxTextureSize": 2048, "textureCompression": "Uncompressed",
+            "mipmapEnabled": False, "isReadable": False, "npotScale": "None",
+        },
+        {
+            "texture_type": "default", "srgb": True, "alpha_source": "from_input",
+            "alpha_is_transparency": True, "wrap_mode": "clamp", "filter_mode": "bilinear",
+            "max_texture_size": 2048, "compression": "none",
+            "generate_mipmaps": False, "readable": False, "npot_scale": "none",
+        },
+    ])
+    def test_set_import_settings_preserves_complete_reported_dictionary(self, monkeypatch, settings):
+        captured = {}
+
+        async def fake_send(func, instance, cmd, params, **kwargs):
+            captured["params"] = params
+            return {"success": True}
+
+        monkeypatch.setattr(manage_texture_mod, "send_with_unity_instance", fake_send)
+        monkeypatch.setattr(manage_texture_mod, "preflight", noop_preflight)
+        response = run_async(manage_texture_mod.manage_texture(
+            ctx=DummyContext(), action="set_import_settings",
+            path="Assets/TestTextures/Belt.png", import_settings=settings,
+        ))
+
+        assert response["success"] is True
+        assert captured["params"]["importSettings"] == {
+            "textureType": "Default", "sRGBTexture": True, "alphaSource": "FromInput",
+            "alphaIsTransparency": True, "wrapMode": "Clamp", "filterMode": "Bilinear",
+            "maxTextureSize": 2048, "textureCompression": "Uncompressed",
+            "mipmapEnabled": False, "isReadable": False, "npotScale": "None",
+        }
+
+    @pytest.mark.parametrize("settings, message", [
+        ({"srgb": True, "typo": False}, "Unsupported import_settings keys: typo"),
+        ({"wrap_mode": "clamp", "wrapMode": "Repeat"}, "Conflicting import_settings keys"),
+        ({"npotScale": "invalid"}, "Invalid npot_scale"),
+        ({"mipmapEnabled": []}, "generate_mipmaps must be a boolean"),
+        ({"maxTextureSize": 2048.5}, "max_texture_size must be an integer"),
+        ({"maxTextureSize": True}, "max_texture_size must be a finite number"),
+        ({"textureCompression": 2}, "Invalid compression"),
+        ({}, "requires non-empty"),
+    ])
+    def test_invalid_import_settings_never_reach_unity(self, monkeypatch, settings, message):
+        from unittest.mock import AsyncMock
+        send = AsyncMock()
+        monkeypatch.setattr(manage_texture_mod, "send_with_unity_instance", send)
+        monkeypatch.setattr(manage_texture_mod, "preflight", noop_preflight)
+
+        response = run_async(manage_texture_mod.manage_texture(
+            ctx=DummyContext(), action="set_import_settings",
+            path="Assets/TestTextures/Belt.png", import_settings=settings,
+        ))
+
+        assert response["success"] is False
+        assert message in response["message"]
+        send.assert_not_awaited()
+
+    def test_equivalent_aliases_are_accepted_after_validation(self):
+        settings, error = manage_texture_mod._normalize_import_settings({
+            "generate_mipmaps": "false", "mipmapEnabled": False,
+            "compression": "none", "textureCompression": "Uncompressed",
+        })
+        assert error is None
+        assert settings == {"mipmapEnabled": False, "textureCompression": "Uncompressed"}

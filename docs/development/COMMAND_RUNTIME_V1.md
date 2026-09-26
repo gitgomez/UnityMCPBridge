@@ -1,17 +1,17 @@
 # Command Runtime v1
 
 Status: Implemented and verified on `optimize/bridge`
-Target branch: `beta`
+Development branch: `optimize/bridge`
 Scope: Python MCP server, Unity Editor package, built-in and custom tool contracts
 Compatibility requirement: no behavior change for legacy package/server pairs
 
 ## Summary
 
-MCP for Unity currently transports tool calls reliably enough for short interactive
-workflows, but it does not yet define a shared execution contract across the Python
-server and the Unity Editor package. A transport timeout can leave the outcome of a
-mutation unknown, retries do not carry a stable logical request identity, command
-queues are not bounded consistently, and response/status formats vary by layer.
+Command Runtime v1 is implemented in this fork. It adds a shared execution contract
+across the Python server and the Unity Editor package, addressing the timeout,
+retry-identity, queue-bound, and response-format gaps of the historical upstream
+baseline described below. This document records the delivered runtime design;
+the baseline observations are not current defects of the fork.
 
 Command Runtime v1 introduces an optional, negotiated runtime layer with:
 
@@ -29,10 +29,11 @@ The runtime is additive. A new server must continue to operate with an old Unity
 package, and a new Unity package must continue to operate with an old server. Runtime
 v1 behavior is enabled only when both ends advertise the required capability.
 
-## Verified baseline
+## Historical upstream baseline
 
-This proposal is based on `10.1.1-beta.1` (`upstream/beta` at `bd72241a`). The
-following behaviors were verified directly in that source:
+The original design was based on `10.1.1-beta.1` (`upstream/beta` at `bd72241a`).
+The following behaviors were verified directly in that historical source, before
+the runtime implementation:
 
 - `register` includes project and Unity identity, but no protocol version, package
   version, schema version, or schema hash.
@@ -52,11 +53,11 @@ following behaviors were verified directly in that source:
 - tool responses mix transport `status`, tool `success`, `_mcp_status`, `error`, and
   `code` fields.
 
-Two earlier concerns are partially mitigated in the current beta:
+Two earlier concerns were already partially mitigated in that upstream snapshot:
 
-- `batch_execute` now limits batches to 25 commands by default and 100 at the hard
+- `batch_execute` limited batches to 25 commands by default and 100 at the hard
   ceiling; and
-- HTTP session cleanup now uses ping-based eviction, replacement of sessions for the
+- HTTP session cleanup used ping-based eviction, replacement of sessions for the
   same project hash, and weak references for MCP client-session notifications.
 
 Neither mitigation provides the command-level execution guarantees defined here.
@@ -172,7 +173,7 @@ message. Existing servers ignore unknown fields.
     "protocol": "command-runtime",
     "major": 1,
     "minor": 0,
-    "package_version": "10.1.1-beta.1",
+    "package_version": "10.2.8",
     "contract_version": 1,
     "built_in_schema_hash": "sha256:...",
     "capabilities": [
@@ -264,7 +265,7 @@ and `batch_semantics_v1`. Post-phase reload hardening adds
 
 ### Source of truth
 
-Runtime v1 introduces a checked-in manifest, proposed at
+Runtime v1 uses the checked-in manifest at
 `Contracts/tool-contracts.v1.json`. It is normative for built-in tools. The existing
 Python, CLI, and C# layers remain hand-written initially, but CI extracts their public
 surfaces and validates them against the manifest.
@@ -430,7 +431,7 @@ CLI forward the wait parameters unchanged; they do not synthesize repeated
 `inspect_ui` requests. This preserves the receipt ledger's retry guarantee while
 keeping poll count independent from receipt count.
 
-The proposed persistence location is project-local and unversioned:
+The implemented persistence location is project-local and unversioned:
 `Library/MCPForUnity/RunState/command-receipts-v1.json`. Writes use an atomic temporary
 file plus replace operation.
 

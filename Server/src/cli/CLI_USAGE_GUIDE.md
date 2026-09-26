@@ -834,6 +834,13 @@ unity-mcp texture create "Assets/Textures/Photo.png" --image-path "/path/to/sour
 # Create with custom import settings
 unity-mcp texture create "Assets/Textures/Normal.png" --import-settings '{"textureType": "NormalMap", "filterMode": "Trilinear"}'
 
+# Update an existing importer (development checkout; matching package/server required)
+unity-mcp texture set-import-settings "Assets/Textures/Belt.png" --import-settings '{"wrapMode":"Clamp","mipmapEnabled":false,"isReadable":false,"npotScale":"None"}'
+unity-mcp texture modify "Assets/Textures/Belt.png" --npot-scale none --no-mipmaps --no-readable
+
+# Documented snake_case and Unity aliases share validation. Unknown settings and
+# conflicting aliases or JSON/flag values fail before dispatch.
+
 # Create sprites (auto-configures import settings for 2D)
 unity-mcp texture sprite "Assets/Sprites/Player.png" --width 32 --height 32 --color "0,0.5,1,1"
 unity-mcp texture sprite "Assets/Sprites/Tile.png" --pattern checkerboard --ppu 16 --pivot "0.5,0"

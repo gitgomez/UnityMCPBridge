@@ -21,7 +21,7 @@ UnityMCPBridge consists of a Unity package and a Python MCP server. Install both
 In Unity, open **Window → Package Manager**, click **`+`**, choose **Add package from git URL...**, and paste:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.7
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.8
 ```
 
 The tag makes the package install reproducible. If the repository is private, Git must already have credentials that allow Unity Package Manager to clone it. Never put a token in the URL or commit one to `Packages/manifest.json`.
@@ -31,7 +31,7 @@ The tag makes the package install reproducible. If the repository is private, Gi
 The package derives the matching server source from its stable version automatically:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.7#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.8#subdirectory=Server
 ```
 
 The tag must match the Unity package tag exactly. Leave **Server Source Override** empty for the release default. Use the override only for a local checkout or another intentional custom source. The public `mcpforunityserver` PyPI package and the upstream Docker image are upstream distributions; they do not contain UnityMCPBridge-only behavior.
@@ -73,7 +73,7 @@ For a direct stdio launch from the stable source tag:
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.7#subdirectory=Server",
+        "git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.8#subdirectory=Server",
         "mcp-for-unity",
         "--transport",
         "stdio"
