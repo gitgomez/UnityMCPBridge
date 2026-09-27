@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Tools.PlayMode;
 using Newtonsoft.Json.Linq;
@@ -162,8 +163,92 @@ namespace MCPForUnityTests.PlayMode
 
                 JObject clicked = Execute("click_ui", "action-button");
                 AssertSuccess(clicked);
+                Assert.AreEqual("left", clicked["data"].Value<string>("button"));
                 yield return null;
                 Assert.AreEqual("clicked", status.text);
+
+                JObject nullButton = ToJObject(InteractPlayMode.HandleCommand(new JObject
+                {
+                    ["action"] = "click_ui", ["ui_system"] = "ui_toolkit",
+                    ["document"] = DocumentName, ["element_name"] = "action-button",
+                    ["button"] = JValue.CreateNull(),
+                }));
+                AssertSuccess(nullButton);
+                Assert.AreEqual("left", nullButton["data"].Value<string>("button"));
+
+                var pointerEvents = new List<string>();
+                int downPointerId = -1;
+                EventCallback<PointerDownEvent> rightDown = evt =>
+                {
+                    if (evt.button != 1) return;
+                    downPointerId = evt.pointerId;
+                    pointerEvents.Add($"down:{evt.button}:{evt.pressedButtons}");
+                };
+                EventCallback<PointerUpEvent> rightUp = evt =>
+                {
+                    if (evt.button != 1) return;
+                    Assert.AreEqual(downPointerId, evt.pointerId);
+                    pointerEvents.Add($"up:{evt.button}:{evt.pressedButtons}");
+                };
+                root.RegisterCallback(rightDown, TrickleDown.TrickleDown);
+                root.RegisterCallback(rightUp, TrickleDown.TrickleDown);
+                status.text = "right-ready";
+                JObject rightClicked = Execute("click_ui", "action-button", new JObject { ["button"] = "right" });
+                AssertSuccess(rightClicked);
+                Assert.AreEqual("right", rightClicked["data"].Value<string>("button"));
+                CollectionAssert.AreEqual(new[] { "down:1:2", "up:1:0" }, pointerEvents);
+                Assert.AreEqual("right-ready", status.text, "Right click must not invoke the left Button action.");
+
+                root.CapturePointer(PointerId.mousePointerId);
+                try
+                {
+                    JObject busy = Execute("click_ui", "action-button", new JObject { ["button"] = "right" });
+                    Assert.AreEqual("pointer_busy", busy.Value<string>("code"));
+                    Assert.AreEqual(2, pointerEvents.Count);
+                }
+                finally { root.ReleasePointer(PointerId.mousePointerId); }
+
+                using (PointerDownEvent held = PointerDownEvent.GetPooled(new Event { type = EventType.MouseDown, button = 0 })) { }
+                try
+                {
+                    JObject busy = Execute("click_ui", "action-button", new JObject { ["button"] = "right" });
+                    Assert.AreEqual("pointer_busy", busy.Value<string>("code"));
+                    Assert.AreEqual(2, pointerEvents.Count);
+                }
+                finally
+                {
+                    using (PointerUpEvent released = PointerUpEvent.GetPooled(new Event { type = EventType.MouseUp, button = 0 })) { }
+                }
+                root.UnregisterCallback(rightDown, TrickleDown.TrickleDown);
+                root.UnregisterCallback(rightUp, TrickleDown.TrickleDown);
+
+                // The next default click must still be a normal left Button activation.
+                AssertSuccess(Execute("click_ui", "action-button"));
+                Assert.AreEqual("clicked", status.text);
+
+                var dismissible = new VisualElement { name = "dismissible" };
+                Place(dismissible, 730, 20, 180, 48);
+                root.Add(dismissible);
+                yield return null;
+                dismissible.RegisterCallback<PointerUpEvent>(evt =>
+                {
+                    if (evt.button == 1) dismissible.RemoveFromHierarchy();
+                });
+                AssertSuccess(Execute("click_ui", "dismissible", new JObject { ["button"] = "right" }));
+                Assert.IsNull(dismissible.parent, "Right release should be able to close its view.");
+
+                var interrupted = new VisualElement { name = "interrupted" };
+                Place(interrupted, 730, 20, 180, 48);
+                root.Add(interrupted);
+                yield return null;
+                interrupted.RegisterCallback<PointerDownEvent>(evt =>
+                {
+                    if (evt.button == 1) interrupted.RemoveFromHierarchy();
+                });
+                JObject partial = Execute("click_ui", "interrupted", new JObject { ["button"] = "right" });
+                Assert.AreEqual("pointer_dispatch_interrupted", partial.Value<string>("code"));
+                Assert.IsFalse(partial["data"]["eventsInvoked"].Value<bool>("pointerUp"));
+                AssertSuccess(Execute("click_ui", "action-button", new JObject { ["button"] = "right" }));
 
                 JObject textSet = Execute(
                     "set_text",

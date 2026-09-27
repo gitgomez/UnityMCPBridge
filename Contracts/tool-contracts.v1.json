@@ -2743,7 +2743,7 @@
     },
     {
       "name": "interact_play_mode",
-      "description": "Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or normalized screen-space panel coordinates. Coordinates use a top-left origin. Mutating actions can cause gameplay or external side effects.",
+      "description": "Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click by default; button='right' is supported only for UI Toolkit. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or normalized screen-space panel coordinates. Coordinates use a top-left origin. Mutating actions can cause gameplay or external side effects.",
       "group": "core",
       "unity_target": "interact_play_mode",
       "input_schema": {
@@ -3065,6 +3065,22 @@
             ],
             "default": null,
             "description": "Distinct UI key modifiers for key_ui (at most four). Does not press physical modifier keys."
+          },
+          "button": {
+            "anyOf": [
+              {
+                "enum": [
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Mouse button for click_ui only. Omitted/null means left; right requires ui_system='ui_toolkit'."
           }
         },
         "required": [

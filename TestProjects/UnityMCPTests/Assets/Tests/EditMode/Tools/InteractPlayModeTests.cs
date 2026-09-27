@@ -32,6 +32,40 @@ namespace MCPForUnityTests.Editor.Tools
                     .Value<string>("backend"));
         }
 
+        [TestCase("click_ui", "ugui", "right", "ui_toolkit_required")]
+        [TestCase("click_ui", "ui_toolkit", "middle", "invalid_click_button")]
+        [TestCase("click_ui", "ui_toolkit", "RIGHT", "invalid_click_button")]
+        [TestCase("ping", "ui_toolkit", "left", "invalid_click_parameters")]
+        [TestCase("drag_ui", "ui_toolkit", "right", "invalid_click_parameters")]
+        [TestCase("wait_ui", "ui_toolkit", "right", "invalid_click_parameters")]
+        public async Task ClickButton_RejectsInvalidParameters(string action, string uiSystem,
+            string button, string code)
+        {
+            var request = new JObject
+            {
+                ["action"] = action, ["ui_system"] = uiSystem, ["button"] = button,
+            };
+            JObject result = ToJObject(await InteractPlayMode.HandleCommandAsync(request));
+            Assert.IsFalse(result.Value<bool>("success"), result.ToString());
+            Assert.AreEqual(code, result.Value<string>("code"));
+        }
+
+        [TestCase(1)]
+        [TestCase(false)]
+        public void ClickButton_RejectsNonString(object button)
+        {
+            JObject result = Execute("click_ui", new JObject { ["button"] = JToken.FromObject(button) });
+            Assert.AreEqual("invalid_click_button", result.Value<string>("code"));
+        }
+
+        [Test]
+        public void Ping_AdvertisesUiToolkitClickButtons()
+        {
+            JObject result = Execute("ping");
+            CollectionAssert.AreEqual(new[] { "left", "right" },
+                result["data"]["uiSystems"]["uiToolkit"]["clickButtons"].ToObject<string[]>());
+        }
+
         [Test]
         public void ClickUi_RejectsEditModeWithoutSideEffects()
         {

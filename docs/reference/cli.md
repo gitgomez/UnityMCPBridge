@@ -117,6 +117,7 @@ mcp-for-unity editor play-ui-status
 mcp-for-unity editor inspect-ui --help
 mcp-for-unity editor wait-ui --help
 mcp-for-unity editor click-ui --help
+mcp-for-unity editor click-ui --ui-system ui_toolkit --document RuntimeUI --element-name workspace --button right
 mcp-for-unity editor drag-ui --help
 mcp-for-unity editor scroll-ui --help
 mcp-for-unity editor set-ui-text --help

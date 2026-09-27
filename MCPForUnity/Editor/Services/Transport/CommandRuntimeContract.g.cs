@@ -42,7 +42,7 @@ namespace MCPForUnity.Editor.Services.Transport
     internal static class CommandRuntimeContract
     {
         internal const int ContractVersion = 1;
-        internal const string BuiltInSchemaHash = "sha256:f39c608f2aa58231169192cec4048923268509a640e72efc07196fe1da9f9e1c";
+        internal const string BuiltInSchemaHash = "sha256:6e8bffb02e0e76cb15ac8427e7fad59ba05012f4b4b00d663abb1584fca679a4";
 
         internal static readonly IReadOnlyDictionary<string, CommandRuntimeToolPolicy>
             ToolPolicies = new Dictionary<string, CommandRuntimeToolPolicy>(StringComparer.Ordinal)

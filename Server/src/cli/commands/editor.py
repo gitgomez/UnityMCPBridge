@@ -558,6 +558,8 @@ def set_ui_toggle(
 
 @editor.command("click-ui")
 @click.argument("target", required=False)
+@click.option("--button", type=click.Choice(["left", "right"]), default=None,
+              help="Mouse button (default: left). Right click requires UI Toolkit.")
 @click.option(
     "--ui-system",
     type=click.Choice(["ugui", "ui_toolkit"]),
@@ -591,6 +593,7 @@ def set_ui_toggle(
 @handle_unity_errors
 def click_ui(
     target: Optional[str],
+    button: Optional[str],
     ui_system: str,
     position: Optional[tuple[float, float]],
     search_method: Optional[str],
@@ -611,7 +614,10 @@ def click_ui(
         unity-mcp editor click-ui "Canvas/Menu/Start" --search-method by_path
         unity-mcp editor click-ui --position 0.5 0.75
         unity-mcp editor click-ui --ui-system ui_toolkit --document UIRoot --element-name start-button
+        unity-mcp editor click-ui --ui-system ui_toolkit --document UIRoot --element-name workspace --button right
     """
+    if button == "right" and ui_system != "ui_toolkit":
+        raise click.UsageError("Right click requires --ui-system ui_toolkit.")
     params = _runtime_ui_address_params(
         action="click_ui",
         ui_system=ui_system,
@@ -625,6 +631,9 @@ def click_ui(
         element_type=element_type,
         element_index=element_index,
     )
+
+    if button is not None:
+        params["button"] = button
 
     config = get_config()
     result = run_command("interact_play_mode", params, config)

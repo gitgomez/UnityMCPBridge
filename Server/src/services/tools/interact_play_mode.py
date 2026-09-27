@@ -66,7 +66,8 @@ _MAX_SCROLL_DELTA = 100.0
         "Mode without operating the OS mouse. uGUI remains the default; select "
         "ui_system='ui_toolkit' and provide a UIDocument plus a bounded element "
         "query for UI Toolkit. ping reports support and Play Mode state. click_ui "
-        "dispatches a left pointer click. inspect_ui reports bounded runtime state "
+        "dispatches a left pointer click by default; button='right' is supported "
+        "only for UI Toolkit. inspect_ui reports bounded runtime state "
         "for one active or inactive UI target. wait_ui performs bounded frame-driven "
         "inspection in Unity as one logical runtime command without blocking the main "
         "thread. set_text updates a TMP or "
@@ -190,6 +191,10 @@ async def interact_play_mode(
         Optional[list[PlayModeKeyModifier]],
         "Distinct UI key modifiers for key_ui (at most four). Does not press physical modifier keys.",
     ] = None,
+    button: Annotated[
+        Optional[Literal["left", "right"]],
+        "Mouse button for click_ui only. Omitted/null means left; right requires ui_system='ui_toolkit'.",
+    ] = None,
 ) -> dict:
     """Dispatch bounded Play Mode UI inspection, waiting, and interaction."""
 
@@ -223,6 +228,7 @@ async def interact_play_mode(
         scroll_delta=scroll_delta,
         key_code=key_code,
         modifiers=modifiers,
+        button=button,
     )
     if validation_error is not None:
         return validation_error
@@ -249,6 +255,8 @@ async def interact_play_mode(
         params["element_type"] = element_type
     if element_index is not None:
         params["element_index"] = element_index
+    if button is not None:
+        params["button"] = button
     if action_lower == "inspect_ui":
         params["include_text"] = include_text
     elif action_lower == "wait_ui":
@@ -312,12 +320,21 @@ def _validate_parameters(
     scroll_delta: list[float] | None,
     key_code: str | None = None,
     modifiers: list[str] | None = None,
+    button: str | None = None,
 ) -> dict | None:
     if ui_system not in {"ugui", "ui_toolkit"}:
         return _error(
             "invalid_ui_system",
             "ui_system must be 'ugui' or 'ui_toolkit'.",
         )
+
+    if button is not None:
+        if button not in ("left", "right"):
+            return _error("invalid_click_button", "button must be 'left' or 'right'.")
+        if action != "click_ui":
+            return _error("invalid_click_parameters", "button is only supported for click_ui.")
+        if button == "right" and ui_system != "ui_toolkit":
+            return _error("ui_toolkit_required", "Right click requires ui_system='ui_toolkit'.")
 
     if action in {"hover_ui", "key_ui"} and ui_system != "ui_toolkit":
         return _error(

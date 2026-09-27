@@ -786,6 +786,12 @@ interact_play_mode(
     element_name="nav-market"
 )
 
+# Right click is UI Toolkit only; omitted/null button keeps the left default.
+interact_play_mode(
+    action="click_ui", ui_system="ui_toolkit",
+    document="ManagementView", element_name="workspace", button="right"
+)
+
 # Other bounded actions use the same backend-specific address
 interact_play_mode(action="set_text", target="SearchInput", text="ore")
 interact_play_mode(action="set_toggle", target="ShowCodes", value=False)
@@ -863,10 +869,17 @@ document after KeyDown, the error records that KeyUp was not sent; inspect befor
 CLI counterparts:
 
 ```text
+unity-mcp editor click-ui --ui-system ui_toolkit --document ManagementView --element-name workspace --button right
 unity-mcp editor hover-ui --document ManagementView --element-name nav-market
 unity-mcp editor wait-ui --ui-system ui_toolkit --document ManagementView --element-name nav-market --condition hovered
 unity-mcp editor key-ui --document ManagementView --key-code Escape
 ```
+
+`button` is only valid for `click_ui`; right click requires UI Toolkit and a free
+mouse pointer (no pressed buttons or capture). The events use normal panel
+hit-testing and propagation, button 1, and pressed masks 2 then 0. See
+[click button boundaries](capabilities-and-limitations.md#ui-toolkit-click-buttons)
+for interrupted dispatch and retry behavior.
 
 This tool does not synthesize arbitrary keyboard, mouse-device, touch-device, text,
 IME, or operating-system input and cannot dismiss native Unity dialogs. New UI

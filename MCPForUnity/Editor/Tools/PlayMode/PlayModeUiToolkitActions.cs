@@ -82,6 +82,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 documentCount,
                 backend = "runtime_ui_toolkit",
                 hoverSupported = PseudoStatesProperty != null,
+                clickButtons = new[] { "left", "right" },
                 keyCodes = KeyCodes.OrderBy(value => value).ToArray(),
                 keyModifiers = new[] { "Shift", "Control", "Alt", "Command" },
                 keyNavigationEvents = false,
@@ -384,9 +385,45 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 return addressError;
             }
 
+            string button = p.GetRaw("button")?.Value<string>() ?? "left";
+            int pointerButton = button == "right" ? 1 : 0;
+            if (pointerButton == 1)
+            {
+                using (PointerMoveEvent probe = PointerMoveEvent.GetPooled(new Event
+                {
+                    type = EventType.MouseMove,
+                    mousePosition = address.PanelPoint,
+                    button = -1,
+                }))
+                {
+                    if (probe.pressedButtons != 0
+                        || address.Context.Panel.GetCapturingElement(PointerId.mousePointerId) != null)
+                        return ErrorResponse.FromCode("pointer_busy",
+                            "Right click requires a mouse pointer with no pressed buttons or active capture.");
+                }
+            }
+
+            // Navigation callbacks may remove the clicked view on release.
+            object documentDescription = DescribeDocument(address.Context);
+            object requestedDescription = address.RequestedElement == null
+                ? null : DescribeElement(address.RequestedElement, address.Context.Root);
+            object hitDescription = DescribeElement(address.HitElement, address.Context.Root);
             string sceneBefore = SceneManager.GetActiveScene().name;
-            SendPointerDown(address.HitElement, address.PanelPoint);
-            SendPointerUp(address.HitElement, address.PanelPoint);
+            bool pointerUpDispatched = false;
+            try
+            {
+                SendPointerDown(address.HitElement, address.PanelPoint, pointerButton);
+            }
+            finally
+            {
+                pointerUpDispatched = address.HitElement.panel == address.Context.Panel;
+                // GetPooled(MouseUp) releases our button even if Down detached the target.
+                SendPointerUp(address.HitElement, address.PanelPoint, pointerButton);
+            }
+            if (!pointerUpDispatched)
+                return ErrorResponse.FromCode("pointer_dispatch_interrupted",
+                    "The click target detached after PointerDown; PointerUp could not reach the original panel. Inspect state before retrying.",
+                    new { button, eventsInvoked = new { pointerDown = true, pointerUp = false } });
             EditorApplication.QueuePlayerLoopUpdate();
 
             string sceneAfter = EditorApplication.isPlaying
@@ -396,15 +433,10 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 "Runtime UI Toolkit click was dispatched through the panel event system.",
                 new
                 {
-                    document = DescribeDocument(address.Context),
-                    requestedElement = address.RequestedElement == null
-                        ? null
-                        : DescribeElement(
-                            address.RequestedElement,
-                            address.Context.Root),
-                    hitElement = DescribeElement(
-                        address.HitElement,
-                        address.Context.Root),
+                    document = documentDescription,
+                    requestedElement = requestedDescription,
+                    hitElement = hitDescription,
+                    button,
                     normalizedPosition = DescribeNormalized(
                         address.NormalizedPosition),
                     panelPosition = DescribeVector(address.PanelPoint),
@@ -1740,13 +1772,14 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
         private static void SendPointerDown(
             VisualElement target,
-            Vector2 panelPoint)
+            Vector2 panelPoint,
+            int button = 0)
         {
             var systemEvent = new Event
             {
                 type = EventType.MouseDown,
                 mousePosition = panelPoint,
-                button = 0,
+                button = button,
             };
             using (PointerDownEvent pointerEvent =
                 PointerDownEvent.GetPooled(systemEvent))
@@ -1778,13 +1811,14 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
         private static void SendPointerUp(
             VisualElement target,
-            Vector2 panelPoint)
+            Vector2 panelPoint,
+            int button = 0)
         {
             var systemEvent = new Event
             {
                 type = EventType.MouseUp,
                 mousePosition = panelPoint,
-                button = 0,
+                button = button,
             };
             using (PointerUpEvent pointerEvent =
                 PointerUpEvent.GetPooled(systemEvent))

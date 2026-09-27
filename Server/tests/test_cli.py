@@ -938,6 +938,27 @@ class TestEditorCommands:
             {"action": "click_ui", "position": [0.5, 0.75]},
         )
 
+    @pytest.mark.parametrize("button", ["left", "right"])
+    def test_editor_click_ui_toolkit_button(self, runner, mock_unity_response, button):
+        with patch("cli.commands.editor.run_command", return_value=mock_unity_response) as mock_run:
+            result = runner.invoke(cli, ["editor", "click-ui", "--ui-system", "ui_toolkit",
+                                        "--document", "RuntimeUI", "--element-name", "surface",
+                                        "--button", button])
+        assert result.exit_code == 0, result.output
+        assert mock_run.call_args.args[0] == "interact_play_mode"
+        assert mock_run.call_args.args[1]["button"] == button
+
+    @pytest.mark.parametrize("args", [
+        ["Button", "--button", "right"],
+        ["--ui-system", "ui_toolkit", "--document", "RuntimeUI",
+         "--element-name", "surface", "--button", "middle"],
+    ])
+    def test_editor_click_ui_rejects_unsupported_button(self, runner, args):
+        with patch("cli.commands.editor.run_command") as mock_run:
+            result = runner.invoke(cli, ["editor", "click-ui", *args])
+        assert result.exit_code != 0
+        mock_run.assert_not_called()
+
     def test_editor_click_ui_requires_one_address(self, runner):
         """Reject target-less coordinate-less clicks before transport."""
         with patch("cli.commands.editor.run_command") as mock_run:

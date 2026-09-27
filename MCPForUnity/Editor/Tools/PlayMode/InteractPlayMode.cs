@@ -60,6 +60,9 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                         "invalid_ui_system",
                         "'ui_system' must be 'ugui' or 'ui_toolkit'.");
                 }
+                object buttonError = ValidateClickButton(p, action, uiSystem);
+                if (buttonError != null)
+                    return buttonError;
                 if ((action == "hover_ui" || action == "key_ui")
                     && uiSystem != "ui_toolkit")
                 {
@@ -121,6 +124,10 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
             try
             {
+                var p = new ToolParams(@params);
+                object buttonError = ValidateClickButton(p, action, p.Get("ui_system") ?? "ugui");
+                if (buttonError != null)
+                    return buttonError;
                 return await PlayModeUiWaitActions.WaitAsync(@params);
             }
             catch (Exception ex)
@@ -133,6 +140,21 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 return new ErrorResponse(
                     $"Play Mode interaction 'wait_ui' failed: {reported.Message}");
             }
+        }
+
+        private static object ValidateClickButton(ToolParams p, string action, string uiSystem)
+        {
+            JToken button = p.GetRaw("button");
+            if (button == null || button.Type == JTokenType.Null)
+                return null;
+            if (button.Type != JTokenType.String
+                || (button.Value<string>() != "left" && button.Value<string>() != "right"))
+                return ErrorResponse.FromCode("invalid_click_button", "button must be 'left' or 'right'.");
+            if (action != "click_ui")
+                return ErrorResponse.FromCode("invalid_click_parameters", "button is only supported for click_ui.");
+            if (button.Value<string>() == "right" && uiSystem != "ui_toolkit")
+                return ErrorResponse.FromCode("ui_toolkit_required", "Right click requires ui_system='ui_toolkit'.");
+            return null;
         }
 
         private static object Ping()

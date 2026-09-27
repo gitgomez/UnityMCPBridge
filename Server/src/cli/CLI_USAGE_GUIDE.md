@@ -368,6 +368,7 @@ unity-mcp editor play-ui-status
 unity-mcp editor inspect-ui --help
 unity-mcp editor wait-ui --help
 unity-mcp editor click-ui --help
+unity-mcp editor click-ui --ui-system ui_toolkit --document RuntimeUI --element-name workspace --button right
 unity-mcp editor drag-ui --help
 unity-mcp editor scroll-ui --help
 unity-mcp editor set-ui-text --help

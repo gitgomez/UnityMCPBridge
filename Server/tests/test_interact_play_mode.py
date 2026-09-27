@@ -116,6 +116,40 @@ def test_click_ui_requires_exactly_one_address(mock_unity):
     assert mock_unity["calls"] == []
 
 
+@pytest.mark.parametrize("button", [None, "left", "right"])
+def test_click_ui_toolkit_button_forwarding(mock_unity, button):
+    result = run_tool(action="click_ui", ui_system="ui_toolkit",
+                      document="RuntimeUI", position=[0.5, 0.5], button=button)
+    assert result["success"] is True
+    assert mock_unity["tool_name"] == "interact_play_mode"
+    assert len(mock_unity["calls"]) == 1
+    assert mock_unity["params"].get("button") == button
+    assert ("button" in mock_unity["params"]) == (button is not None)
+
+
+@pytest.mark.parametrize("button", ["middle", "RIGHT", "", 1, False, {}])
+def test_click_ui_rejects_invalid_button_before_dispatch(mock_unity, button):
+    result = run_tool(action="click_ui", target="Button", button=button)
+    assert result["code"] == "invalid_click_button"
+    assert mock_unity["calls"] == []
+
+
+@pytest.mark.parametrize("action", [action for action in ALL_ACTIONS if action != "click_ui"])
+def test_button_rejected_for_other_actions(mock_unity, action):
+    result = run_tool(action=action, ui_system="ui_toolkit", button="left")
+    assert result["code"] == "invalid_click_parameters"
+    assert mock_unity["calls"] == []
+
+
+def test_click_ui_ugui_rejects_right_but_accepts_explicit_left(mock_unity):
+    result = run_tool(action="click_ui", target="Button", button="right")
+    assert result["code"] == "ui_toolkit_required"
+    assert mock_unity["calls"] == []
+    result = run_tool(action="click_ui", target="Button", button="left")
+    assert result["success"] is True
+    assert mock_unity["params"]["button"] == "left"
+
+
 def test_inspect_ui_forwards_read_options(mock_unity):
     run_tool(
         action="inspect_ui",

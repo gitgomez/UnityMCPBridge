@@ -107,7 +107,7 @@ actions are:
 | `ping` | Report Play Mode state plus uGUI and UI Toolkit support. |
 | `inspect_ui` | Read bounded state for one runtime UI target. |
 | `wait_ui` | Poll an inspection condition frame-by-frame inside Unity as one bounded runtime command. |
-| `click_ui` | Dispatch one left pointer click. |
+| `click_ui` | Dispatch one left pointer click by default, or a right click for UI Toolkit. |
 | `set_text` | Set a supported input field and optionally submit without echoing sensitive text. |
 | `set_toggle` | Idempotently set a supported toggle. |
 | `drag_ui` | Dispatch a bounded synchronous pointer drag. |
@@ -147,6 +147,23 @@ entries.
 - Items that have not been realized by a virtualized collection are not present
   in the Visual Tree and cannot be addressed by an element query. Item-index or
   stable-item-ID collection addressing is not currently implemented.
+
+### UI Toolkit click buttons
+
+Starting with `v10.2.9`, `click_ui` accepts `button="left"` or `button="right"`. Omitted/null means left;
+existing left clicks and drags retain their default button. Right click is UI
+Toolkit only. Other actions reject an explicit `button`; uGUI rejects right
+click instead of silently dispatching left. `ping` advertises `clickButtons` in
+the UI Toolkit support object.
+
+A right click uses the existing panel hit-test and normal PointerDown/PointerUp
+propagation with button 1, the same mouse pointer ID, and `pressedButtons` 2 then
+0. It requires no currently pressed mouse buttons or active capture on the panel
+(`pointer_busy` otherwise). A view may remove itself during PointerUp. Detachment
+after PointerDown instead returns `pointer_dispatch_interrupted` with partial
+event information; inspect state before any retry. The release still clears the
+synthetic button state. This is one existing Runtime-v1 command/receipt, not
+hardware/Input System device input or a direct application callback invocation.
 
 ### UI Toolkit hover and keys
 
