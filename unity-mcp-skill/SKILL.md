@@ -94,6 +94,9 @@ runtime interaction.
 
 - Use `interact_play_mode(action="ping")` to inspect current uGUI and UI Toolkit
   support.
+- Discover `input_play_mode` separately for gameplay device polling. Read its
+  reference and `status` first. Use only bounded gestures while human input is
+  idle; verify normal gameplay effects and owned-device cleanup afterwards.
 - Prefer `inspect_ui` and `wait_ui` before mutation, then verify state after the
   action.
 - Select `ui_system="ui_toolkit"` explicitly for UI Toolkit; uGUI is the

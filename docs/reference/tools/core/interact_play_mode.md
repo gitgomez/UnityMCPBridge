@@ -6,16 +6,16 @@
 
 ## Description
 
-Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click by default; button='right' is supported only for UI Toolkit. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or normalized screen-space panel coordinates. Coordinates use a top-left origin. Mutating actions can cause gameplay or external side effects.
+Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click by default; button='right' is supported only for UI Toolkit. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or explicit panel, texture-UV or camera-viewport coordinates. Only texture_uv uses a bottom-left origin; other spaces are top-left. Mutating actions can cause gameplay or external side effects. inspect_collection pages logical ListView/TreeView items without realization. collection addresses an item by index or engine ID; reveal_item explicitly scrolls and waits for realization, with optional ancestor expansion. set_collection_expanded changes one tree node.
 
 ## Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `action` | `Literal['ping', 'click_ui', 'inspect_ui', 'wait_ui', 'set_text', 'set_toggle', 'drag_ui', 'scroll_ui', 'hover_ui', 'key_ui']` | yes | Play Mode UI action. |
+| `action` | `Literal['ping', 'click_ui', 'inspect_ui', 'wait_ui', 'set_text', 'set_toggle', 'drag_ui', 'scroll_ui', 'hover_ui', 'key_ui', 'inspect_collection', 'reveal_item', 'set_collection_expanded']` | yes | Play Mode UI action. |
 | `ui_system` | `Literal['ugui', 'ui_toolkit']` | — | Runtime UI system. Defaults to uGUI for backward compatibility. |
 | `target` | `str \| None` | — | uGUI GameObject name, hierarchy path, or instance ID. |
-| `position` | `list[float] \| None` | — | Normalized top-left-origin [x,y] position for pointer actions, including UI Toolkit hover_ui. |
+| `position` | `list[float] \| None` | — | Normalized [x,y] pointer position. Top-left by default or camera_viewport; bottom-left only for texture_uv. See coordinate_space. |
 | `search_method` | `Literal['by_id', 'by_name', 'by_path'] \| None` | — | Optional uGUI target lookup mode; inferred from target when omitted. |
 | `document` | `str \| None` | — | UI Toolkit UIDocument GameObject name, hierarchy path, or instance ID. |
 | `document_search_method` | `Literal['by_id', 'by_name', 'by_path'] \| None` | — | Optional UI Toolkit UIDocument lookup mode; inferred when omitted. |
@@ -24,7 +24,7 @@ Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode wit
 | `element_type` | `str \| None` | — | Exact UI Toolkit element type name, simple or fully qualified. |
 | `element_index` | `int \| None` | — | Zero-based match index for an otherwise ambiguous UI Toolkit query (0-1023). |
 | `include_text` | `bool` | — | Include non-password UI text in inspect_ui and wait_ui state. |
-| `condition` | `Literal['exists', 'active', 'visible', 'interactable', 'selected', 'text_equals', 'text_contains', 'toggle_equals', 'hovered'] \| None` | — | Condition for wait_ui. |
+| `condition` | `Literal['exists', 'active', 'visible', 'interactable', 'selected', 'text_equals', 'text_contains', 'toggle_equals', 'hovered', 'realized'] \| None` | — | Condition for wait_ui. |
 | `expected` | `bool \| str \| None` | — | Expected bool or string for wait_ui; boolean conditions default to true. |
 | `timeout_seconds` | `float` | — | Bounded wait_ui timeout in seconds (0.1-30). |
 | `poll_interval_seconds` | `float` | — | wait_ui polling interval in seconds (0.05-1). |
@@ -32,12 +32,15 @@ Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode wit
 | `submit` | `bool` | — | Dispatch the uGUI submit event after set_text. |
 | `sensitive` | `bool` | — | Treat set_text as sensitive even if the input field is not password-typed. |
 | `value` | `bool \| None` | — | Desired Toggle state for set_toggle. |
-| `end_position` | `list[float] \| None` | — | Required normalized top-left-origin [x,y] destination for drag_ui. |
+| `end_position` | `list[float] \| None` | — | Required normalized [x,y] destination for drag_ui, in the same coordinate_space as its start. |
 | `steps` | `int` | — | Number of synchronous drag_ui movement steps (1-64). |
 | `scroll_delta` | `list[float] \| None` | — | Required [x,y] Unity scroll units for scroll_ui; positive y scrolls up. |
 | `key_code` | `Literal['Escape', 'Tab', 'Return', 'Space', 'LeftArrow', 'RightArrow', 'UpArrow', 'DownArrow', 'Backspace', 'Delete', 'Home', 'End', 'PageUp', 'PageDown'] \| None` | — | Named UI key for key_ui. Sends KeyDown/KeyUp only; Tab/Return do not generate navigation/submit. |
 | `modifiers` | `list[Literal['Shift', 'Control', 'Alt', 'Command']] \| None` | — | Distinct UI key modifiers for key_ui (at most four). Does not press physical modifier keys. |
 | `button` | `Literal['left', 'right'] \| None` | — | Mouse button for click_ui only. Omitted/null means left; right requires ui_system='ui_toolkit'. |
+| `collection` | `dict[str, Any] \| None` | — | UI Toolkit collection address: exactly one index or engine id; optional query scopes element_* selectors inside a realized row. inspect_collection accepts offset (0-100000) and limit (1-100). reveal_item optionally accepts expand_ancestors=true. Inspection never realizes items. IDs are not persistent game IDs. |
+| `coordinate_space` | `Literal['panel_normalized', 'texture_uv', 'camera_viewport'] \| None` | — | UI Toolkit position/drag space: panel_normalized is top-left; texture_uv is bottom-left. camera_viewport is top-left relative to an explicit camera and requires surface. No device input or native world-space panel picking. |
+| `surface` | `dict[str, Any] \| None` | — | For camera_viewport only: camera and target identify GameObjects; optional camera_search_method/target_search_method use by_id, by_name or by_path. Requires a matching non-convex MeshCollider/MeshFilter, one MeshRenderer material, UV0, and Unlit/Texture or Universal Render Pipeline/Unlit bound to the document RenderTexture with identity tiling. Occlusion checks non-trigger 3D colliders in the camera mask, not rendered pixels. |
 
 ## Returns
 

@@ -63,6 +63,9 @@ def test_action_surface_is_bounded():
         "scroll_ui",
         "hover_ui",
         "key_ui",
+        "inspect_collection",
+        "reveal_item",
+        "set_collection_expanded",
     ]
     assert ALL_WAIT_CONDITIONS == [
         "exists",
@@ -74,6 +77,7 @@ def test_action_surface_is_bounded():
         "text_contains",
         "toggle_equals",
         "hovered",
+        "realized",
     ]
 
 
@@ -83,6 +87,66 @@ def test_ping_forwards_only_action(mock_unity):
     assert result["success"] is True
     assert mock_unity["tool_name"] == "interact_play_mode"
     assert mock_unity["params"] == {"action": "ping"}
+
+
+@pytest.mark.parametrize("action,collection,extra", [
+    ("inspect_collection", {"offset": 100, "limit": 25}, {}),
+    ("reveal_item", {"index": 1999}, {"timeout_seconds": 2}),
+    ("reveal_item", {"id": 20, "expand_ancestors": True}, {}),
+    ("set_collection_expanded", {"id": 10}, {"value": False}),
+    ("inspect_ui", {"index": 100, "query": {"element_name": "button"}}, {}),
+    ("click_ui", {"id": 100, "query": {"element_class": "row-button"}}, {"button": "right"}),
+    ("wait_ui", {"id": 20}, {"condition": "realized", "expected": False}),
+])
+def test_collection_forwarding_is_one_command(mock_unity, action, collection, extra):
+    result = run_tool(action=action, ui_system="ui_toolkit", document="UI", element_name="items", collection=collection, **extra)
+    assert result["success"]
+    assert len(mock_unity["calls"]) == 1
+    assert mock_unity["params"]["collection"] == collection
+    for key, value in extra.items():
+        assert mock_unity["params"][key] == value
+
+
+@pytest.mark.parametrize("action,collection,extra", [
+    ("reveal_item", None, {}), ("reveal_item", {}, {}),
+    ("reveal_item", {"index": 1, "id": 1}, {}),
+    ("reveal_item", {"index": True}, {}), ("reveal_item", {"index": -1}, {}),
+    ("reveal_item", {"id": 1, "expand_ancestors": "true"}, {}),
+    ("inspect_collection", {"limit": 101}, {}),
+    ("inspect_collection", {"offset": 100001}, {}),
+    ("inspect_collection", {"index": 1}, {}),
+    ("click_ui", {"id": 1, "expand_ancestors": True}, {}),
+    ("inspect_ui", {"id": 1, "query": {}}, {}),
+    ("inspect_ui", {"id": 1, "query": {"element_name": 3}}, {}),
+    ("inspect_ui", {"id": 1, "query": {"element_index": 3}}, {}),
+    ("set_collection_expanded", {"id": 1}, {}),
+    ("set_collection_expanded", {"id": 1}, {"value": "true"}),
+    ("reveal_item", {"index": 1}, {"timeout_seconds": float("nan")}),
+    ("reveal_item", {"index": 1}, {"timeout_seconds": 31}),
+])
+def test_collection_validation_never_dispatches(mock_unity, action, collection, extra):
+    result = run_tool(action=action, ui_system="ui_toolkit", document="UI", element_name="items", collection=collection, **extra)
+    assert result["code"] == "invalid_collection_parameters"
+    assert not mock_unity["calls"]
+
+
+@pytest.mark.parametrize("action", ["inspect_collection", "reveal_item", "set_collection_expanded"])
+def test_collection_actions_reject_ugui(mock_unity, action):
+    assert not run_tool(action=action, target="UI", collection={"id": 1})["success"]
+    assert not mock_unity["calls"]
+
+
+@pytest.mark.parametrize("space", ["panel_normalized", "texture_uv"])
+@pytest.mark.parametrize("action,extra", [("click_ui", {}), ("hover_ui", {}), ("scroll_ui", {"scroll_delta": [0, -1]}), ("drag_ui", {"end_position": [0.8, 0.1]})])
+def test_explicit_coordinate_spaces_forward(mock_unity, space, action, extra):
+    assert run_tool(action=action, ui_system="ui_toolkit", document="UI", position=[0.5, 0.2], coordinate_space=space, **extra)["success"]
+    assert mock_unity["params"]["coordinate_space"] == space
+
+
+@pytest.mark.parametrize("action,ui_system,space", [("click_ui", "ugui", "panel_normalized"), ("click_ui", "ui_toolkit", "world"), ("inspect_ui", "ui_toolkit", "texture_uv")])
+def test_invalid_coordinate_spaces_do_not_dispatch(mock_unity, action, ui_system, space):
+    assert run_tool(action=action, ui_system=ui_system, coordinate_space=space)["code"] == "invalid_coordinate_space"
+    assert not mock_unity["calls"]
 
 
 def test_click_ui_forwards_target_lookup(mock_unity):
@@ -573,6 +637,45 @@ def test_wait_ui_validates_condition_and_timeout_before_transport(mock_unity):
 
     assert result["success"] is False
     assert result["code"] == "invalid_wait_expected"
+    assert mock_unity["calls"] == []
+
+
+@pytest.mark.parametrize("action,extra", [("click_ui", {}), ("hover_ui", {}),
+    ("drag_ui", {"end_position": [0.7, 0.2]}), ("scroll_ui", {"scroll_delta": [0, -2]})])
+def test_camera_surface_forwarding(mock_unity, action, extra):
+    surface = {"camera": "Camera", "target": "Screen", "target_search_method": "by_name"}
+    result = run_tool(action=action, ui_system="ui_toolkit", document="UI", position=[0.3, 0.7],
+        coordinate_space="camera_viewport", surface=surface, **extra)
+    assert result["success"] is True
+    assert len(mock_unity["calls"]) == 1
+    assert mock_unity["params"]["surface"] == surface
+    assert mock_unity["params"]["coordinate_space"] == "camera_viewport"
+
+
+@pytest.mark.parametrize("surface", [None, {}, [], {"camera": "Cam"}, {"camera": True, "target": "Screen"},
+    {"camera": "Cam", "target": " "}, {"camera": "Cam", "target": "Screen", "uv": 1},
+    {"camera": "Cam", "target": "Screen", "camera_search_method": "wrong"},
+    {"camera": "Cam", "target": "Screen", "camera_search_method": []},
+    {"camera": "Cam", "target": "Screen", "target_search_method": 1}])
+def test_invalid_surface_rejected_before_dispatch(mock_unity, surface):
+    result = run_tool(action="click_ui", ui_system="ui_toolkit", document="UI", position=[0.5, 0.5],
+        coordinate_space="camera_viewport", surface=surface)
+    assert result["code"] == "invalid_coordinate_space"
+    assert mock_unity["calls"] == []
+
+
+@pytest.mark.parametrize("space", [None, "panel_normalized", "texture_uv"])
+def test_surface_cannot_be_silently_ignored(mock_unity, space):
+    result = run_tool(action="click_ui", ui_system="ui_toolkit", document="UI", position=[0.5, 0.5],
+        coordinate_space=space, surface={"camera": "Cam", "target": "Screen"})
+    assert result["code"] == "invalid_coordinate_space"
+    assert mock_unity["calls"] == []
+
+
+def test_camera_drag_cannot_start_from_element_query(mock_unity):
+    result = run_tool(action="drag_ui", ui_system="ui_toolkit", document="UI", element_name="Button",
+        end_position=[0.5, 0.5], coordinate_space="camera_viewport", surface={"camera": "Cam", "target": "Screen"})
+    assert result["code"] == "invalid_coordinate_space"
     assert mock_unity["calls"] == []
 
 

@@ -2571,6 +2571,198 @@
       }
     },
     {
+      "name": "input_play_mode",
+      "description": "Bounded gameplay keyboard/mouse input through optional Unity Input System virtual devices. status is read-only. key holds a chord; move uses absolute Game View coordinates or relative pixels; click/drag/scroll use an explicit position. Stable unpaused Play Mode and Dynamic updates required; paired InputUser/PlayerInput, legacy input and locked cursor are unsupported. No OS input, rebinding or settings changes. One gesture per Editor, normal player frames, at most 10 seconds including cleanup. cancel requires the active operation_id from status and releases only Bridge-owned devices. Input may cause irreversible gameplay; inspect after timeout, never blindly replay.",
+      "group": "core",
+      "unity_target": "input_play_mode",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "Bounded input action.",
+            "enum": [
+              "status",
+              "key",
+              "move",
+              "click",
+              "drag",
+              "scroll",
+              "cancel"
+            ],
+            "type": "string"
+          },
+          "keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "1-8 distinct Input System names: A-Z, Digit0-9, F1-12, Space/Enter/Tab/Escape, editing/navigation keys, Left/Right Shift/Ctrl/Alt/Meta. No text or IME."
+          },
+          "position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Absolute Game View [x,y], normalized 0-1, top-left origin."
+          },
+          "end_position": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Drag endpoint, same normalized space."
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Relative mouse pixels, positive Y up, each axis -4096..4096; move only."
+          },
+          "scroll_delta": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Nonzero wheel delta in Input System units, each axis -100..100, positive Y up."
+          },
+          "button": {
+            "anyOf": [
+              {
+                "enum": [
+                  "left",
+                  "right",
+                  "middle"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Click/drag button; default left."
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Key/click/drag minimum duration 0.05-5 seconds, default 0.1. Frame scheduling can extend it."
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Drag movement samples 1-64, default 8; each survives a normal player frame."
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact active operation ID from status; cancel only."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "output_schema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Gameplay Input In Play Mode",
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "availability": {
+        "requires_unity": true
+      },
+      "contract_version": 1,
+      "mutation": {
+        "class": "editor_state",
+        "destructive": true,
+        "triggers_compilation": false,
+        "requires_edit_mode": false,
+        "undoable": false
+      },
+      "execution": {
+        "retry_semantics": "unsafe_without_receipt",
+        "default_timeout_ms": 15000,
+        "max_timeout_ms": 20000,
+        "polling": false
+      },
+      "preconditions": {
+        "supports_if_match": false
+      },
+      "deprecation": {
+        "deprecated": false
+      },
+      "execution_target": {
+        "kind": "unity",
+        "handler": "input_play_mode"
+      }
+    },
+    {
       "name": "inspect_dependencies",
       "description": "Inspect Unity asset dependencies without modifying the project. Use dependencies for forward references, dependents for reverse references, impact before moving or deleting an asset, missing_references for broken serialized references and missing scripts, and cycles for circular asset dependency chains. Results are paginated and package assets are excluded by default.",
       "group": "core",
@@ -2743,7 +2935,7 @@
     },
     {
       "name": "interact_play_mode",
-      "description": "Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click by default; button='right' is supported only for UI Toolkit. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or normalized screen-space panel coordinates. Coordinates use a top-left origin. Mutating actions can cause gameplay or external side effects.",
+      "description": "Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. ping reports support and Play Mode state. click_ui dispatches a left pointer click by default; button='right' is supported only for UI Toolkit. inspect_ui reports bounded runtime state for one active or inactive UI target. wait_ui performs bounded frame-driven inspection in Unity as one logical runtime command without blocking the main thread. set_text updates a TMP or legacy uGUI input field, optionally dispatching submit; its text is never echoed in the mutation response or Unity command log. set_toggle idempotently sets a Toggle. drag_ui dispatches a bounded synchronous pointer sequence. scroll_ui dispatches a bounded two-axis wheel delta to the associated scroll container. UI Toolkit hover_ui sends one pointer move without a press or release; inspect_ui/wait_ui can observe the actual hovered state. UI Toolkit key_ui sends one KeyDown/KeyUp pair to the current focus or document root, without changing focus, generating navigation events, typing text, or changing device state. Tab/Return do not imply navigation or submit. uGUI pointer actions accept a GameObject target or normalized Game View coordinates. UI Toolkit pointer actions accept an element query or explicit panel, texture-UV or camera-viewport coordinates. Only texture_uv uses a bottom-left origin; other spaces are top-left. Mutating actions can cause gameplay or external side effects. inspect_collection pages logical ListView/TreeView items without realization. collection addresses an item by index or engine ID; reveal_item explicitly scrolls and waits for realization, with optional ancestor expansion. set_collection_expanded changes one tree node.",
       "group": "core",
       "unity_target": "interact_play_mode",
       "input_schema": {
@@ -2761,7 +2953,10 @@
               "drag_ui",
               "scroll_ui",
               "hover_ui",
-              "key_ui"
+              "key_ui",
+              "inspect_collection",
+              "reveal_item",
+              "set_collection_expanded"
             ],
             "type": "string"
           },
@@ -2799,7 +2994,7 @@
               }
             ],
             "default": null,
-            "description": "Normalized top-left-origin [x,y] position for pointer actions, including UI Toolkit hover_ui."
+            "description": "Normalized [x,y] pointer position. Top-left by default or camera_viewport; bottom-left only for texture_uv. See coordinate_space."
           },
           "search_method": {
             "anyOf": [
@@ -2912,7 +3107,8 @@
                   "text_equals",
                   "text_contains",
                   "toggle_equals",
-                  "hovered"
+                  "hovered",
+                  "realized"
                 ],
                 "type": "string"
               },
@@ -2995,7 +3191,7 @@
               }
             ],
             "default": null,
-            "description": "Required normalized top-left-origin [x,y] destination for drag_ui."
+            "description": "Required normalized [x,y] destination for drag_ui, in the same coordinate_space as its start."
           },
           "steps": {
             "default": 5,
@@ -3081,6 +3277,49 @@
             ],
             "default": null,
             "description": "Mouse button for click_ui only. Omitted/null means left; right requires ui_system='ui_toolkit'."
+          },
+          "collection": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UI Toolkit collection address: exactly one index or engine id; optional query scopes element_* selectors inside a realized row. inspect_collection accepts offset (0-100000) and limit (1-100). reveal_item optionally accepts expand_ancestors=true. Inspection never realizes items. IDs are not persistent game IDs."
+          },
+          "coordinate_space": {
+            "anyOf": [
+              {
+                "enum": [
+                  "panel_normalized",
+                  "texture_uv",
+                  "camera_viewport"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UI Toolkit position/drag space: panel_normalized is top-left; texture_uv is bottom-left. camera_viewport is top-left relative to an explicit camera and requires surface. No device input or native world-space panel picking."
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "For camera_viewport only: camera and target identify GameObjects; optional camera_search_method/target_search_method use by_id, by_name or by_path. Requires a matching non-convex MeshCollider/MeshFilter, one MeshRenderer material, UV0, and Unlit/Texture or Universal Render Pipeline/Unlit bound to the document RenderTexture with identity tiling. Occlusion checks non-trigger 3D colliders in the camera mask, not rendered pixels."
           }
         },
         "required": [

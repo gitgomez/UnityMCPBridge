@@ -1,6 +1,7 @@
 """Editor CLI commands."""
 
 import sys
+import json
 import click
 from typing import Optional, Any
 
@@ -17,6 +18,84 @@ def editor():
     pass
 
 
+@editor.command("input")
+@click.argument("action", type=click.Choice(["status", "key", "move", "click", "drag", "scroll", "cancel"]))
+@click.option("--key", "keys", multiple=True, help="Repeat for a chord; Input System key names.")
+@click.option("--position", type=float, nargs=2)
+@click.option("--end-position", type=float, nargs=2)
+@click.option("--delta", type=float, nargs=2)
+@click.option("--scroll-delta", type=float, nargs=2)
+@click.option("--button", type=click.Choice(["left", "right", "middle"]))
+@click.option("--duration", "duration_seconds", type=float)
+@click.option("--steps", type=int)
+@click.option("--operation-id")
+@handle_unity_errors
+def gameplay_input(action, keys, position, end_position, delta, scroll_delta, button, duration_seconds, steps, operation_id):
+    """Bounded gameplay input; separate from UI events. Inspect status before use."""
+    from services.tools.input_play_mode import validate_input_parameters
+
+    params = {k: v for k, v in locals().items() if k != "validate_input_parameters" and v is not None}
+    if keys:
+        params["keys"] = list(keys)
+    else:
+        params.pop("keys")
+    error = validate_input_parameters(params)
+    if error:
+        raise click.UsageError(error)
+    config = get_config()
+    click.echo(format_output(run_command("input_play_mode", params, config), config.format))
+
+
+def _add_collection(params, collection, ui_system):
+    from services.tools.interact_play_mode import validate_collection_parameters
+
+    options = parse_json_dict_or_exit(collection, "collection") if collection is not None else None
+    error = validate_collection_parameters(params["action"], ui_system, options)
+    if error:
+        raise click.UsageError(error)
+    if options is not None:
+        params["collection"] = options
+
+
+@editor.command("collection-ui")
+@click.option("--action", type=click.Choice(["inspect_collection", "reveal_item", "set_collection_expanded"]), required=True)
+@click.option("--document", required=True)
+@click.option("--document-search-method", type=click.Choice(["by_id", "by_name", "by_path"]), default=None)
+@click.option("--element-name", default=None)
+@click.option("--element-class", default=None)
+@click.option("--element-type", default=None)
+@click.option("--element-index", type=click.IntRange(0, 1023), default=None)
+@click.option("--collection", default=None, help="JSON: index/id and optional expand_ancestors; inspect uses offset/limit.")
+@click.option("--value", type=click.Choice(["true", "false"]), default=None)
+@click.option("--timeout", "timeout_seconds", type=click.FloatRange(0.1, 30), default=5.0)
+@handle_unity_errors
+def collection_ui(action, document, document_search_method, element_name, element_class, element_type, element_index, collection, value, timeout_seconds):
+    """Inspect virtualized items, explicitly reveal one, or expand/collapse a tree node."""
+    from services.tools.interact_play_mode import validate_collection_parameters
+
+    options = parse_json_dict_or_exit(collection, "collection") if collection is not None else None
+    resolved_value = None if value is None else value == "true"
+    error = validate_collection_parameters(action, "ui_toolkit", options, resolved_value, timeout_seconds)
+    if error:
+        raise click.UsageError(error)
+    if value is not None and action != "set_collection_expanded":
+        raise click.UsageError("--value is only supported for set_collection_expanded.")
+    params = _runtime_ui_element_params(
+        action="inspect_ui", ui_system="ui_toolkit", target=None, search_method=None,
+        document=document, document_search_method=document_search_method,
+        element_name=element_name, element_class=element_class, element_type=element_type, element_index=element_index,
+    )
+    params["action"] = action
+    if options is not None:
+        params["collection"] = options
+    if action == "set_collection_expanded":
+        params["value"] = resolved_value
+    if action == "reveal_item":
+        params["timeout_seconds"] = timeout_seconds
+    config = get_config()
+    click.echo(format_output(run_command("interact_play_mode", params, config), config.format))
+
+
 def _runtime_ui_address_params(
     *,
     action: str,
@@ -30,8 +109,26 @@ def _runtime_ui_address_params(
     element_class: Optional[str],
     element_type: Optional[str],
     element_index: Optional[int],
+    collection: Optional[str] = None,
+    coordinate_space: Optional[str] = None,
+    surface: Optional[str] = None,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"action": action}
+    from services.tools.interact_play_mode import validate_coordinate_space
+    try:
+        surface_options = json.loads(surface) if surface is not None else None
+    except (ValueError, TypeError) as exc:
+        raise click.UsageError("--surface must be a JSON object.") from exc
+    mapping_error = validate_coordinate_space(action, ui_system, coordinate_space, position, surface_options)
+    if mapping_error:
+        raise click.UsageError(mapping_error)
+    if coordinate_space is not None:
+        params["coordinate_space"] = coordinate_space
+    if surface_options is not None:
+        params["surface"] = surface_options
+    _add_collection(params, collection, ui_system)
+    if collection is not None and position is not None:
+        raise click.UsageError("--collection requires an element query, not --position.")
     if ui_system == "ugui":
         if any(
             value is not None
@@ -117,9 +214,11 @@ def _runtime_ui_element_params(
     element_class: Optional[str],
     element_type: Optional[str],
     element_index: Optional[int],
+    collection: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build an element-only uGUI/UI Toolkit address for stateful actions."""
     params: dict[str, Any] = {"action": action}
+    _add_collection(params, collection, ui_system)
     if ui_system == "ugui":
         if any(
             value is not None
@@ -259,8 +358,10 @@ def play_ui_status():
     show_default=True,
     help="Include non-sensitive text in the inspection.",
 )
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
 @handle_unity_errors
 def inspect_ui(
+    collection: Optional[str],
     target: Optional[str],
     ui_system: str,
     search_method: Optional[str],
@@ -275,6 +376,7 @@ def inspect_ui(
     """Inspect one runtime uGUI or UI Toolkit element."""
     params = _runtime_ui_element_params(
         action="inspect_ui",
+        collection=collection,
         ui_system=ui_system,
         target=target,
         search_method=search_method,
@@ -328,6 +430,7 @@ def inspect_ui(
             "text_contains",
             "toggle_equals",
             "hovered",
+            "realized",
         ]
     ),
     required=True,
@@ -356,8 +459,10 @@ def inspect_ui(
     default=True,
     show_default=True,
 )
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
 @handle_unity_errors
 def wait_ui(
+    collection: Optional[str],
     target: Optional[str],
     ui_system: str,
     search_method: Optional[str],
@@ -374,6 +479,8 @@ def wait_ui(
     include_text: bool,
 ):
     """Wait for one bounded runtime UI condition."""
+    if condition == "realized" and (ui_system != "ui_toolkit" or collection is None):
+        raise click.UsageError("realized requires --ui-system ui_toolkit and --collection.")
     if condition == "hovered" and ui_system != "ui_toolkit":
         raise click.UsageError("The hovered condition requires --ui-system ui_toolkit.")
     text_condition = condition in {"text_equals", "text_contains"}
@@ -394,6 +501,7 @@ def wait_ui(
 
     params = _runtime_ui_element_params(
         action="wait_ui",
+        collection=collection,
         ui_system=ui_system,
         target=target,
         search_method=search_method,
@@ -450,8 +558,10 @@ def wait_ui(
     is_flag=True,
     help="Prevent text lengths and values from being exposed.",
 )
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
 @handle_unity_errors
 def set_ui_text(
+    collection: Optional[str],
     target: Optional[str],
     text: str,
     ui_system: str,
@@ -468,6 +578,7 @@ def set_ui_text(
     """Set one runtime uGUI or UI Toolkit input value."""
     params = _runtime_ui_element_params(
         action="set_text",
+        collection=collection,
         ui_system=ui_system,
         target=target,
         search_method=search_method,
@@ -521,8 +632,10 @@ def set_ui_text(
 @click.option("--element-class", default=None, help="Required USS class.")
 @click.option("--element-type", default=None, help="Exact VisualElement type.")
 @click.option("--element-index", type=click.IntRange(0, 1023), default=None)
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
 @handle_unity_errors
 def set_ui_toggle(
+    collection: Optional[str],
     target: Optional[str],
     value: str,
     ui_system: str,
@@ -537,6 +650,7 @@ def set_ui_toggle(
     """Set one runtime uGUI or UI Toolkit toggle value."""
     params = _runtime_ui_element_params(
         action="set_toggle",
+        collection=collection,
         ui_system=ui_system,
         target=target,
         search_method=search_method,
@@ -572,7 +686,7 @@ def set_ui_toggle(
     type=click.FloatRange(0.0, 1.0),
     default=None,
     metavar="X Y",
-    help="Normalized Game View coordinates with a top-left origin.",
+    help="Normalized pointer coordinates; top-left except with --coordinate-space texture_uv.",
 )
 @click.option(
     "--search-method",
@@ -590,8 +704,14 @@ def set_ui_toggle(
 @click.option("--element-class", default=None, help="Required USS class.")
 @click.option("--element-type", default=None, help="Exact VisualElement type.")
 @click.option("--element-index", type=click.IntRange(0, 1023), default=None)
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
+@click.option("--coordinate-space", type=click.Choice(["panel_normalized", "texture_uv", "camera_viewport"]), default=None)
+@click.option("--surface", default=None, help="Explicit camera and target GameObjects as JSON for camera_viewport.")
 @handle_unity_errors
 def click_ui(
+    coordinate_space: Optional[str],
+    surface: Optional[str],
+    collection: Optional[str],
     target: Optional[str],
     button: Optional[str],
     ui_system: str,
@@ -606,8 +726,8 @@ def click_ui(
 ):
     """Click runtime uGUI or UI Toolkit.
 
-    Explicit targets can be validated before their Canvas' first render. Coordinate
-    clicks always require a normal EventSystem raycast.
+    uGUI uses an EventSystem raycast; UI Toolkit uses panel picking and optional
+    camera/surface mapping.
 
     \b
     Examples:
@@ -620,6 +740,9 @@ def click_ui(
         raise click.UsageError("Right click requires --ui-system ui_toolkit.")
     params = _runtime_ui_address_params(
         action="click_ui",
+        coordinate_space=coordinate_space,
+        surface=surface,
+        collection=collection,
         ui_system=ui_system,
         target=target,
         position=position,
@@ -650,11 +773,17 @@ def click_ui(
 @click.option("--element-type", default=None)
 @click.option("--element-index", type=click.IntRange(0, 1023), default=None)
 @click.option("--position", nargs=2, type=click.FloatRange(0.0, 1.0), default=None, metavar="X Y")
+@click.option("--collection", default=None, help="JSON collection item address.")
+@click.option("--coordinate-space", type=click.Choice(["panel_normalized", "texture_uv", "camera_viewport"]), default=None)
+@click.option("--surface", default=None, help="Explicit camera and target GameObjects as JSON for camera_viewport.")
 @handle_unity_errors
-def hover_ui(document, document_search_method, element_name, element_class, element_type, element_index, position):
+def hover_ui(document, document_search_method, element_name, element_class, element_type, element_index, position, collection, coordinate_space, surface):
     """Move the UI Toolkit pointer without pressing or releasing a button."""
     params = _runtime_ui_address_params(
         action="hover_ui", ui_system="ui_toolkit", target=None, search_method=None,
+        coordinate_space=coordinate_space,
+        surface=surface,
+        collection=collection,
         document=document, document_search_method=document_search_method,
         element_name=element_name, element_class=element_class,
         element_type=element_type, element_index=element_index, position=position,
@@ -707,7 +836,7 @@ def key_ui(document, document_search_method, key_code, modifiers):
     type=click.FloatRange(0.0, 1.0),
     default=None,
     metavar="X Y",
-    help="Normalized top-left-origin drag start coordinates.",
+    help="Normalized drag start in --coordinate-space (default top-left).",
 )
 @click.option(
     "--end-position",
@@ -715,7 +844,7 @@ def key_ui(document, document_search_method, key_code, modifiers):
     type=click.FloatRange(0.0, 1.0),
     required=True,
     metavar="X Y",
-    help="Normalized top-left-origin drag destination.",
+    help="Normalized drag destination in the same --coordinate-space as the start.",
 )
 @click.option(
     "--steps",
@@ -740,8 +869,14 @@ def key_ui(document, document_search_method, key_code, modifiers):
 @click.option("--element-class", default=None, help="Required USS class.")
 @click.option("--element-type", default=None, help="Exact VisualElement type.")
 @click.option("--element-index", type=click.IntRange(0, 1023), default=None)
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
+@click.option("--coordinate-space", type=click.Choice(["panel_normalized", "texture_uv", "camera_viewport"]), default=None)
+@click.option("--surface", default=None, help="Explicit camera and target GameObjects as JSON for camera_viewport.")
 @handle_unity_errors
 def drag_ui(
+    coordinate_space: Optional[str],
+    surface: Optional[str],
+    collection: Optional[str],
     target: Optional[str],
     ui_system: str,
     position: Optional[tuple[float, float]],
@@ -758,6 +893,9 @@ def drag_ui(
     """Drag runtime uGUI or UI Toolkit to END_POSITION."""
     params = _runtime_ui_address_params(
         action="drag_ui",
+        coordinate_space=coordinate_space,
+        surface=surface,
+        collection=collection,
         ui_system=ui_system,
         target=target,
         position=position,
@@ -797,7 +935,7 @@ def drag_ui(
     type=click.FloatRange(0.0, 1.0),
     default=None,
     metavar="X Y",
-    help="Normalized top-left-origin pointer coordinates.",
+    help="Normalized pointer coordinates in --coordinate-space (default top-left).",
 )
 @click.option(
     "--delta",
@@ -824,8 +962,14 @@ def drag_ui(
 @click.option("--element-class", default=None, help="Required USS class.")
 @click.option("--element-type", default=None, help="Exact VisualElement type.")
 @click.option("--element-index", type=click.IntRange(0, 1023), default=None)
+@click.option("--collection", default=None, help="JSON collection item address; element query identifies the collection.")
+@click.option("--coordinate-space", type=click.Choice(["panel_normalized", "texture_uv", "camera_viewport"]), default=None)
+@click.option("--surface", default=None, help="Explicit camera and target GameObjects as JSON for camera_viewport.")
 @handle_unity_errors
 def scroll_ui(
+    coordinate_space: Optional[str],
+    surface: Optional[str],
+    collection: Optional[str],
     target: Optional[str],
     ui_system: str,
     position: Optional[tuple[float, float]],
@@ -844,6 +988,9 @@ def scroll_ui(
 
     params = _runtime_ui_address_params(
         action="scroll_ui",
+        coordinate_space=coordinate_space,
+        surface=surface,
+        collection=collection,
         ui_system=ui_system,
         target=target,
         position=position,

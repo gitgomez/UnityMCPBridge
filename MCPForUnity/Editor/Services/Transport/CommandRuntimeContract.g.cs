@@ -42,7 +42,7 @@ namespace MCPForUnity.Editor.Services.Transport
     internal static class CommandRuntimeContract
     {
         internal const int ContractVersion = 1;
-        internal const string BuiltInSchemaHash = "sha256:6e8bffb02e0e76cb15ac8427e7fad59ba05012f4b4b00d663abb1584fca679a4";
+        internal const string BuiltInSchemaHash = "sha256:718f80f9c2de94852ad386d56ef599422a6253d907151f39be185047204d9423";
 
         internal static readonly IReadOnlyDictionary<string, CommandRuntimeToolPolicy>
             ToolPolicies = new Dictionary<string, CommandRuntimeToolPolicy>(StringComparer.Ordinal)
@@ -65,6 +65,7 @@ namespace MCPForUnity.Editor.Services.Transport
             ["get_test_job"] = new CommandRuntimeToolPolicy("get_test_job", "get_test_job", true, "read_only", false, false, false, false, false),
             ["import_model"] = new CommandRuntimeToolPolicy("import_model", "import_model", true, "asset", false, false, false, false, false),
             ["import_model_file"] = new CommandRuntimeToolPolicy("import_model_file", "import_model_file", true, "asset", false, false, false, false, false),
+            ["input_play_mode"] = new CommandRuntimeToolPolicy("input_play_mode", "input_play_mode", true, "editor_state", true, false, false, false, false),
             ["inspect_dependencies"] = new CommandRuntimeToolPolicy("inspect_dependencies", "inspect_dependencies", true, "read_only", false, false, false, false, false),
             ["interact_play_mode"] = new CommandRuntimeToolPolicy("interact_play_mode", "interact_play_mode", true, "editor_state", true, false, false, false, false),
             ["manage_addressables"] = new CommandRuntimeToolPolicy("manage_addressables", "manage_addressables", true, "asset", true, false, true, false, false),

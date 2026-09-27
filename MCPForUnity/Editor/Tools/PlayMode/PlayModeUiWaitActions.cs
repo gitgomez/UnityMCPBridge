@@ -30,6 +30,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 ["interactable"] = "interactable",
                 ["selected"] = "selected",
                 ["hovered"] = "hovered",
+                ["realized"] = "realized",
                 ["toggle_equals"] = "toggleValue",
             };
 
@@ -43,6 +44,8 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
             string condition = parameters.Value<string>("condition")
                 ?.ToLowerInvariant();
+            if (condition == "realized" && (parameters.Value<string>("ui_system") != "ui_toolkit" || !(parameters["collection"] is JObject)))
+                return Task.FromResult<object>(ErrorResponse.FromCode("invalid_wait_condition", "realized requires a UI Toolkit collection item address."));
             if (condition == "hovered"
                 && parameters.Value<string>("ui_system") != "ui_toolkit")
                 return Task.FromResult<object>(ErrorResponse.FromCode(

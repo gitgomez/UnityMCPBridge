@@ -16,7 +16,7 @@ AI asset generation – 3D model gen/import, 2D image gen & audio gen (bring-you
 - **[`import_model`](./asset_gen/import_model.md)** — Import 3D models from the Sketchfab marketplace into the Unity project.
 - **[`import_model_file`](./asset_gen/import_model_file.md)** — Import a local 3D model file that already exists on disk (e.g. an FBX/OBJ/glTF exported from Blender or another DCC tool) into the Unity project.
 
-## `core` &nbsp; (35 tools)
+## `core` &nbsp; (36 tools)
 Essential scene, script, asset & editor tools (always on by default)
 - **[`apply_text_edits`](./core/apply_text_edits.md)** — Apply small text edits to a C# script identified by URI.
 - **[`audit_project`](./core/audit_project.md)** — Run read-only Unity project health checks and return a structured, paginated report.
@@ -29,6 +29,7 @@ Essential scene, script, asset & editor tools (always on by default)
 - **[`find_gameobjects`](./core/find_gameobjects.md)** — Search for GameObjects in the scene by name, tag, layer, component type, or path.
 - **[`find_in_file`](./core/find_in_file.md)** — Searches a file with a regex pattern and returns line numbers and excerpts.
 - **[`get_sha`](./core/get_sha.md)** — Get SHA256 and basic metadata for a Unity C# script without returning file contents.
+- **[`input_play_mode`](./core/input_play_mode.md)** — Bounded gameplay keyboard/mouse input through optional Unity Input System virtual devices. status is read-only. key holds a chord; move uses absolute Game View coordinates or relative pixels; click/drag/scroll use an explicit position.
 - **[`inspect_dependencies`](./core/inspect_dependencies.md)** — Inspect Unity asset dependencies without modifying the project.
 - **[`interact_play_mode`](./core/interact_play_mode.md)** — Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. pi…
 - **[`manage_addressables`](./core/manage_addressables.md)** — Initialize, inspect, validate, author, and build Unity Addressables content.

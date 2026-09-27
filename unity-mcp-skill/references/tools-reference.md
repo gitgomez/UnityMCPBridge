@@ -745,6 +745,37 @@ manage_editor(action="restore_package")    # Revert to pre-deployment backup
 
 **Deploy workflow:** Set the source path in MCP for Unity Advanced Settings first. `deploy_package` copies the source into the project's package location, creates a backup, and triggers `AssetDatabase.Refresh`. Follow with `refresh_unity(wait_for_ready=True)` to wait for recompilation.
 
+### input_play_mode
+
+Bounded gameplay device input, separate from runtime UI events. Requires the
+optional Input System with Dynamic updates in stable unpaused Play Mode.
+
+```python
+input_play_mode(action="status")
+input_play_mode(action="key", keys=["Space"], duration_seconds=0.1)
+input_play_mode(action="key", keys=["LeftShift", "W"], duration_seconds=0.5)
+input_play_mode(action="move", delta=[12, -5])
+input_play_mode(action="click", position=[0.3, 0.7], button="right")
+input_play_mode(action="drag", position=[0.2, 0.2], end_position=[0.8, 0.7], steps=8, duration_seconds=1)
+input_play_mode(action="scroll", position=[0.5, 0.5], scroll_delta=[0, -2])
+# From another request while input is running; obtain the exact ID via status:
+input_play_mode(action="cancel", operation_id="<active 32-character ID>")
+```
+
+Absolute positions are normalized Game View coordinates with a top-left origin;
+relative pixels and wheel deltas have positive Y upward. The duration is a minimum,
+not a precision timing promise. Each drag sample survives normal player frames.
+`status` exposes devices/readiness and `active.operation_id`, never human key text.
+The command result reports queued events, movement samples, release observation
+and cleanup evidence; this is not proof that the application accepted the input.
+Verify application state after completion.
+
+Temporary virtual devices are removed on completion, cancellation, pause, exit,
+reload, quit or transport loss. Paired/device-filtered input and locked cursors
+are unsupported; physical devices and bindings are never modified. If cleanup
+fails, status keeps the operation for a guarded cleanup retry; inspect the error.
+No blind replay after timeout. See [input contract and recovery](../../docs/development/PLAY_MODE_INPUT.md).
+
 ### interact_play_mode
 
 Inspect, wait for, and interact with runtime uGUI or UI Toolkit without moving
@@ -811,7 +842,8 @@ interact_play_mode(
 ```
 
 The declared actions are `ping`, `inspect_ui`, `wait_ui`, `click_ui`,
-`set_text`, `set_toggle`, `drag_ui`, `scroll_ui`, `hover_ui`, and `key_ui`. Read the active tool schema
+`set_text`, `set_toggle`, `drag_ui`, `scroll_ui`, `hover_ui`, `key_ui`,
+`inspect_collection`, `reveal_item`, and `set_collection_expanded`. Read the active tool schema
 for their full parameter sets and bounds.
 
 `wait_ui` is forwarded to Unity once. Unity performs the bounded frame-driven
@@ -832,6 +864,43 @@ Screen Space panels. Query support and panel-coordinate limits are documented in
 Mutating UI handlers run synchronously, while their gameplay effects may finish
 on later player frames. They can cause gameplay or external side effects. Do not
 retry a timed-out or lost mutation before inspecting the resulting state.
+
+Collection and flat RenderTexture examples (available starting with v10.3.0):
+
+```python
+interact_play_mode(action="inspect_collection", ui_system="ui_toolkit",
+    document="RuntimeUI", element_name="ships", collection={"offset": 0, "limit": 50})
+interact_play_mode(action="inspect_ui", ui_system="ui_toolkit",
+    document="RuntimeUI", element_name="ships", collection={"index": 1700})
+interact_play_mode(action="reveal_item", ui_system="ui_toolkit",
+    document="RuntimeUI", element_name="ships", collection={"index": 1700}, timeout_seconds=5)
+interact_play_mode(action="click_ui", ui_system="ui_toolkit",
+    document="RuntimeUI", element_name="ships",
+    collection={"index": 1700, "query": {"element_name": "row-button"}})
+interact_play_mode(action="set_collection_expanded", ui_system="ui_toolkit",
+    document="RuntimeUI", element_name="tree", collection={"id": 10}, value=False)
+interact_play_mode(action="click_ui", ui_system="ui_toolkit",
+    document="TextureUI", position=[0.25, 0.75], coordinate_space="texture_uv")
+```
+
+Read-only inspection never realizes an item. IDs are Unity collection IDs, not
+durable game identifiers. A tree index means a visible flattened index; use an ID
+to address a collapsed child. `reveal_item` requires `expand_ancestors=true` to
+expand hidden parents and may leave scroll/expansion changes after a timeout.
+Texture UVs use a bottom-left origin; `panel_normalized` uses top-left. Neither
+proves world visibility. For a RenderTexture displayed on a supported mesh, use:
+
+```python
+interact_play_mode(action="click_ui", ui_system="ui_toolkit", document="TextureUI",
+    position=[0.4, 0.6], coordinate_space="camera_viewport",
+    surface={"camera": "ViewCamera", "target": "WorldScreen"})
+```
+
+Camera viewport coordinates are top-left and require a unique camera/surface
+address. Returned `surfaceMapping` describes the ray hit, UV and panel point.
+Only supported Unlit materials, matching mesh/collider UV0 and collider-based
+occlusion are covered; read the [mapping limits](capabilities-and-limitations.md#camerasurface-mapping).
+Native world-space panel picking is a separate unsupported capability.
 
 UI Toolkit hover and key examples:
 

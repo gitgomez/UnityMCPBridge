@@ -17,11 +17,12 @@ namespace MCPForUnity.Editor.Tools.PlayMode
     /// separate backend from uGUI's EventSystem path because VisualElements are
     /// not GameObjects and live in a retained panel tree.
     /// </summary>
-    internal static class PlayModeUiToolkitActions
+    internal static partial class PlayModeUiToolkitActions
     {
         private static readonly PropertyInfo PseudoStatesProperty =
             typeof(VisualElement).GetProperty(
                 "pseudoStates", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        private static readonly PropertyInfo PanelRenderModeProperty = typeof(PanelSettings).GetProperty("renderMode", BindingFlags.Instance | BindingFlags.Public);
         private static readonly HashSet<string> KeyCodes = new HashSet<string>(StringComparer.Ordinal)
         {
             "Escape", "Tab", "Return", "Space",
@@ -62,6 +63,12 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     return Hover(p);
                 case "key_ui":
                     return Key(p);
+                case "inspect_collection":
+                    return InspectCollection(p);
+                case "set_collection_expanded":
+                    return SetCollectionExpanded(p);
+                case "reveal_item":
+                    return ErrorResponse.FromCode("asynchronous_dispatch_required", "reveal_item requires the asynchronous Unity dispatcher.");
                 default:
                     return ErrorResponse.FromCode(
                         "ui_toolkit_action_unsupported",
@@ -99,6 +106,10 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 },
                 coordinateSpace = "normalized_panel",
                 coordinateOrigin = "top_left",
+                explicitCoordinateSpaces = new[] { "panel_normalized", "texture_uv", "camera_viewport" },
+                worldSurfaceMapping = new { supported = true, occlusion = "physics_3d_camera_mask_non_trigger", uvChannel = 0, shaders = new[] { "Unlit/Texture", "Universal Render Pipeline/Unlit" } },
+                nativeWorldSpacePicking = false,
+                collections = new { supported = true, selectors = new[] { "index", "id" }, inspectRealizesItems = false, pageLimit = 100, idsPersistent = false },
             };
         }
 
@@ -134,6 +145,8 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     {
                         exists = false,
                         documentExists = false,
+                        itemExists = p.GetRaw("collection") is JObject ? (bool?)false : null,
+                        realized = p.GetRaw("collection") is JObject ? (bool?)false : null,
                         document = p.Get("document"),
                         query = query.Describe(),
                         backend = "runtime_ui_toolkit",
@@ -145,6 +158,9 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     documentResolution.Code,
                     documentResolution.Error);
             }
+
+            if (p.GetRaw("collection") is JObject)
+                return InspectCollectionItem(p, documentResolution.Context, query);
 
             ElementResolution elementResolution = ResolveElement(
                 documentResolution.Context,
@@ -387,7 +403,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
             string button = p.GetRaw("button")?.Value<string>() ?? "left";
             int pointerButton = button == "right" ? 1 : 0;
-            if (pointerButton == 1)
+            if (pointerButton == 1 || address.Surface != null)
             {
                 using (PointerMoveEvent probe = PointerMoveEvent.GetPooled(new Event
                 {
@@ -437,9 +453,11 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     requestedElement = requestedDescription,
                     hitElement = hitDescription,
                     button,
+                    coordinateSpace = p.Get("coordinate_space", "panel_normalized"),
                     normalizedPosition = DescribeNormalized(
-                        address.NormalizedPosition),
+                        address.NormalizedPosition, p),
                     panelPosition = DescribeVector(address.PanelPoint),
+                    surfaceMapping = address.SurfaceMapping,
                     eventsInvoked = new
                     {
                         pointerDown = true,
@@ -487,8 +505,10 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 {
                     document = documentDescription,
                     hitElement = hitDescription,
-                    normalizedPosition = DescribeNormalized(address.NormalizedPosition),
+                    coordinateSpace = p.Get("coordinate_space", "panel_normalized"),
+                    normalizedPosition = DescribeNormalized(address.NormalizedPosition, p),
                     panelPosition = DescribeVector(address.PanelPoint),
+                    surfaceMapping = address.SurfaceMapping,
                     eventsInvoked = new { pointerMove = true, pointerDown = false, pointerUp = false },
                     backend = "runtime_ui_toolkit",
                     note = "One pointer move without a click; inspect/wait for hover and scheduled UI effects on later player frames.",
@@ -624,9 +644,11 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     "'steps' must be an integer between 1 and 64.");
             }
 
-            Vector2 endPoint = NormalizedToPanel(
-                address.Context.Panel,
-                endNormalized);
+            if (address.Surface != null)
+                return DragSurface(p, address, endNormalized, steps);
+
+            if (!TryMapPanelPoint(address.Context, p, endNormalized, false, out Vector2 endPoint, out object mappingError))
+                return mappingError;
             SendPointerDown(address.HitElement, address.PanelPoint);
 
             Vector2 previousPoint = address.PanelPoint;
@@ -673,8 +695,9 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                             finalHit,
                             address.Context.Root),
                     startPosition = DescribeNormalized(
-                        address.NormalizedPosition),
-                    endPosition = DescribeNormalized(endNormalized),
+                        address.NormalizedPosition, p),
+                    coordinateSpace = p.Get("coordinate_space", "panel_normalized"),
+                    endPosition = DescribeNormalized(endNormalized, p),
                     steps,
                     eventsInvoked = new
                     {
@@ -764,8 +787,10 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     scrollView = DescribeElement(
                         scrollView,
                         address.Context.Root),
+                    coordinateSpace = p.Get("coordinate_space", "panel_normalized"),
                     normalizedPosition = DescribeNormalized(
-                        address.NormalizedPosition),
+                        address.NormalizedPosition, p),
+                    surfaceMapping = address.SurfaceMapping,
                     scrollDelta = new
                     {
                         x = requestedDelta.x,
@@ -819,7 +844,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
             ElementResolution elementResolution = ResolveElement(
                 documentResolution.Context,
-                query);
+                query, p);
             if (!elementResolution.Success)
             {
                 errorResponse = ErrorResponse.FromCode(
@@ -853,6 +878,12 @@ namespace MCPForUnity.Editor.Tools.PlayMode
             }
 
             DocumentContext context = documentResolution.Context;
+            if (context.Document.panelSettings != null
+                && PanelRenderModeProperty?.GetValue(context.Document.panelSettings)?.ToString() == "WorldSpace")
+            {
+                errorResponse = ErrorResponse.FromCode("ui_toolkit_world_space_unsupported", "Native world-space picking is not supported by this backend. A flat RenderTexture panel is a separate mapping mode.");
+                return false;
+            }
             if (!IsDocumentMutable(context))
             {
                 errorResponse = ErrorResponse.FromCode(
@@ -877,6 +908,8 @@ namespace MCPForUnity.Editor.Tools.PlayMode
             Vector2 normalizedPosition;
             Vector2 panelPoint;
             VisualElement hitElement;
+            SurfaceContext surface = null;
+            object surfaceMapping = null;
             if (hasPosition)
             {
                 if (!InteractPlayMode.TryReadNormalizedPosition(
@@ -889,24 +922,20 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                         positionError);
                     return false;
                 }
-                if (context.Document.panelSettings != null
-                    && context.Document.panelSettings.targetTexture != null)
+                if (p.Get("coordinate_space") == "camera_viewport")
                 {
-                    errorResponse = ErrorResponse.FromCode(
-                        "ui_toolkit_screen_space_required",
-                        "Coordinate UI Toolkit interaction currently requires a screen-space PanelSettings without a target texture.");
-                    return false;
+                    if (!TryResolveSurface(p, out surface, out errorResponse)
+                        || !TryMapSurfacePoint(context, surface, normalizedPosition, out panelPoint, out surfaceMapping, out errorResponse))
+                        return false;
                 }
-
-                panelPoint = NormalizedToPanel(
-                    context.Panel,
-                    normalizedPosition);
+                else if (!TryMapPanelPoint(context, p, normalizedPosition, true, out panelPoint, out errorResponse))
+                    return false;
                 hitElement = context.Panel.Pick(panelPoint);
-                if (hitElement == null)
+                if (hitElement == null || (hitElement != context.Root && !context.Root.Contains(hitElement)))
                 {
                     errorResponse = ErrorResponse.FromCode(
                         "ui_raycast_miss",
-                        "No runtime UI Toolkit element was picked at the requested position.");
+                        "No element belonging to the requested UIDocument was picked at the position.");
                     return false;
                 }
             }
@@ -926,7 +955,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
                 ElementResolution elementResolution = ResolveElement(
                     context,
-                    query);
+                    query, p);
                 if (!elementResolution.Success)
                 {
                     errorResponse = ErrorResponse.FromCode(
@@ -956,6 +985,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 normalizedPosition = PanelToNormalized(
                     context.Panel,
                     panelPoint);
+                if (p.Get("coordinate_space") == "texture_uv") normalizedPosition.y = 1f - normalizedPosition.y;
             }
 
             address = new PointerAddress(
@@ -963,7 +993,42 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 requestedElement,
                 hitElement,
                 normalizedPosition,
-                panelPoint);
+                panelPoint, surface, surfaceMapping);
+            return true;
+        }
+
+        internal static object ValidateCoordinateSpace(ToolParams p, string action, string uiSystem)
+        {
+            JToken space = p.GetRaw("coordinate_space");
+            JToken surface = p.GetRaw("surface");
+            if (surface != null && surface.Type != JTokenType.Null && space?.ToString() != "camera_viewport")
+                return ErrorResponse.FromCode("invalid_coordinate_space", "surface requires coordinate_space='camera_viewport'.");
+            if (space == null || space.Type == JTokenType.Null) return null;
+            bool pointer = action == "click_ui" || action == "hover_ui" || action == "scroll_ui" || action == "drag_ui";
+            if (uiSystem != "ui_toolkit" || space.Type != JTokenType.String
+                || (space.Value<string>() != "panel_normalized" && space.Value<string>() != "texture_uv" && space.Value<string>() != "camera_viewport")
+                || !pointer || (p.GetRaw("position") == null && action != "drag_ui"))
+                return ErrorResponse.FromCode("invalid_coordinate_space", "Explicit coordinate_space requires a UI Toolkit coordinate pointer action or drag endpoint; use panel_normalized, texture_uv or camera_viewport.");
+            return space.Value<string>() == "camera_viewport" ? ValidateSurface(p) : null;
+        }
+
+        private static bool TryMapPanelPoint(DocumentContext context, ToolParams p, Vector2 normalized,
+            bool coordinateStart, out Vector2 point, out object error)
+        {
+            point = default; error = null;
+            var settings = context.Document.panelSettings;
+            string space = p.Get("coordinate_space");
+            bool hasTexture = settings != null && settings.targetTexture != null;
+            if (coordinateStart && hasTexture && space == null)
+                error = ErrorResponse.FromCode("ui_toolkit_screen_space_required", "A RenderTexture coordinate action requires explicit coordinate_space: panel_normalized (top-left) or texture_uv (bottom-left).");
+            else if (space == "texture_uv" && !hasTexture)
+                error = ErrorResponse.FromCode("ui_toolkit_texture_required", "texture_uv requires a PanelSettings targetTexture.");
+            Rect bounds = context.Panel.visualTree.worldBound;
+            if (error == null && !IsFinitePositiveRect(bounds))
+                error = ErrorResponse.FromCode("ui_toolkit_panel_geometry_unavailable", "Panel dimensions must be finite and positive.");
+            if (error != null) return false;
+            if (space == "texture_uv") normalized.y = 1f - normalized.y;
+            point = NormalizedToPanel(context.Panel, normalized);
             return true;
         }
 
@@ -1100,13 +1165,21 @@ namespace MCPForUnity.Editor.Tools.PlayMode
 
         internal static ElementResolution ResolveElement(
             DocumentContext context,
-            ElementQuery query)
+            ElementQuery query,
+            ToolParams p = null)
+        {
+            if (p?.GetRaw("collection") is JObject itemAddress)
+                return ResolveCollectionElement(context, query, itemAddress);
+            return ResolveElementInRoot(context.Root, query);
+        }
+
+        private static ElementResolution ResolveElementInRoot(VisualElement root, ElementQuery query)
         {
             var matches = new List<VisualElement>();
             int scanned = 0;
             bool truncated = false;
             var stack = new Stack<VisualElement>();
-            stack.Push(context.Root);
+            stack.Push(root);
 
             while (stack.Count > 0)
             {
@@ -1854,13 +1927,13 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                         (point.y - bounds.yMin) / bounds.height));
         }
 
-        private static object DescribeNormalized(Vector2 value)
+        private static object DescribeNormalized(Vector2 value, ToolParams p)
         {
             return new
             {
                 x = value.x,
                 y = value.y,
-                origin = "top_left",
+                origin = p.Get("coordinate_space") == "texture_uv" ? "bottom_left" : "top_left",
             };
         }
 
@@ -2203,13 +2276,15 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 VisualElement requestedElement,
                 VisualElement hitElement,
                 Vector2 normalizedPosition,
-                Vector2 panelPoint)
+                Vector2 panelPoint, SurfaceContext surface = null, object surfaceMapping = null)
             {
                 Context = context;
                 RequestedElement = requestedElement;
                 HitElement = hitElement;
                 NormalizedPosition = normalizedPosition;
                 PanelPoint = panelPoint;
+                Surface = surface;
+                SurfaceMapping = surfaceMapping;
             }
 
             internal DocumentContext Context { get; }
@@ -2218,6 +2293,8 @@ namespace MCPForUnity.Editor.Tools.PlayMode
             internal VisualElement HitElement { get; }
             internal Vector2 NormalizedPosition { get; }
             internal Vector2 PanelPoint { get; }
+            internal SurfaceContext Surface { get; }
+            internal object SurfaceMapping { get; }
         }
     }
 }

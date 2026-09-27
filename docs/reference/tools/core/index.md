@@ -13,6 +13,7 @@ Essential scene, script, asset & editor tools (always on by default)
 - **[`find_gameobjects`](./find_gameobjects.md)** — Search for GameObjects in the scene by name, tag, layer, component type, or path.
 - **[`find_in_file`](./find_in_file.md)** — Searches a file with a regex pattern and returns line numbers and excerpts.
 - **[`get_sha`](./get_sha.md)** — Get SHA256 and basic metadata for a Unity C# script without returning file contents.
+- **[`input_play_mode`](./input_play_mode.md)** — Bounded gameplay keyboard/mouse input through optional Unity Input System virtual devices. status is read-only. key holds a chord; move uses absolute Game View coordinates or relative pixels; click/drag/scroll use an explicit position.
 - **[`inspect_dependencies`](./inspect_dependencies.md)** — Inspect Unity asset dependencies without modifying the project.
 - **[`interact_play_mode`](./interact_play_mode.md)** — Inspect, wait for, and interact with runtime uGUI or UI Toolkit in Play Mode without operating the OS mouse. uGUI remains the default; select ui_system='ui_toolkit' and provide a UIDocument plus a bounded element query for UI Toolkit. pi…
 - **[`manage_addressables`](./manage_addressables.md)** — Initialize, inspect, validate, author, and build Unity Addressables content.

@@ -15,7 +15,7 @@ This fork is not affiliated with, sponsored by, endorsed by, or supported by Uni
 In Unity, open **Window → Package Manager**, select **Add package from git URL...**, and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.9
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.3.0
 ```
 
 The release tag is immutable and is the public installation contract. Do not replace it with `main` if you need a reproducible installation.
@@ -26,10 +26,10 @@ If the repository is private, Git must already have credentials that allow Unity
 
 Installing the Unity package alone is not enough, but the fork package now derives its matching GitHub server source automatically. It never falls back to the published upstream Python package, which does not contain fork-only commands.
 
-Leave **Server Source Override** empty for a stable release. The default source for `v10.2.9` is:
+Leave **Server Source Override** empty for a stable release. The default source for `v10.3.0` is:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.9#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.3.0#subdirectory=Server
 ```
 
 For a local development checkout, set **Server Source Override** to:
@@ -67,11 +67,22 @@ The fork currently adds or strengthens these areas:
 - durable command receipts, retry/reload behavior, stable handles, and explicit `outcome_unknown` handling;
 - administrative receipt-ledger diagnosis and safe cleanup outside normal receipt admission;
 - runtime uGUI and UI Toolkit inspection, waiting, clicking, dragging, scrolling, text/toggle input, hover, and key events;
+- virtualized ListView/TreeView item inspection and explicit reveal/expansion;
+- flat RenderTexture panel/UV input and explicit camera-to-mesh surface mapping,
+  with bounded geometry/material requirements (not native world-space picking);
+- bounded gameplay keyboard/chord and mouse gestures through optional Input
+  System virtual devices, with status and ID-guarded cancellation;
 - editor-readiness and bounded wait paths for script reloads and Play Mode transitions;
 - guarded external YAML changes and save receipts;
 - composited screenshot capture and matching CLI entry points.
 
 The complete machine-readable surface is owned by [`Contracts/tool-contracts.v1.json`](https://github.com/gitgomez/UnityMCPBridge/blob/main/Contracts/tool-contracts.v1.json). Generated tool pages and hand-written summaries must not override that contract.
+
+The collection, mapping and gameplay-device additions start with v10.3.0.
+Read [runtime UI limits](../development/RUNTIME_UI_EXTENSIONS.md) and
+[input prerequisites and recovery](../development/PLAY_MODE_INPUT.md) before use.
+Input requires Dynamic updates and compatible unpaired actions; it never changes
+project input settings or physical devices.
 
 ## Safe receipt-ledger recovery
 

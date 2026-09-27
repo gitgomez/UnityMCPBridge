@@ -67,7 +67,7 @@ The CLI mirrors the MCP tool catalog. Each command group wraps one or more `mana
 | `mcp-for-unity animation` | Animator + AnimationClip | [`manage_animation`](./tools/animation/manage_animation.md) |
 | `mcp-for-unity ui` | UI Toolkit — UXML/USS/UIDocument | [`manage_ui`](./tools/ui/manage_ui.md) |
 | `mcp-for-unity build` | Player builds across platforms | [`manage_build`](./tools/core/manage_build.md) |
-| `mcp-for-unity editor` | Editor state, Play Mode, runtime UI interaction, undo/redo | [`manage_editor`](./tools/core/manage_editor.md), [`interact_play_mode`](./tools/core/interact_play_mode.md) |
+| `mcp-for-unity editor` | Editor state, Play Mode, runtime UI and bounded gameplay input, undo/redo | [`manage_editor`](./tools/core/manage_editor.md), [`interact_play_mode`](./tools/core/interact_play_mode.md), [`input_play_mode`](./tools/core/input_play_mode.md) |
 | `mcp-for-unity packages` | UPM install/remove/embed | [`manage_packages`](./tools/core/manage_packages.md) |
 | `mcp-for-unity probuilder` | ProBuilder meshes | [`manage_probuilder`](./tools/probuilder/manage_probuilder.md) |
 | `mcp-for-unity profiler` | Profiler session + counters + snapshots | [`manage_profiler`](./tools/profiling/manage_profiler.md) |
@@ -112,6 +112,30 @@ for alias and verification details.
 
 The `editor` group exposes deterministic Play Mode interaction for both uGUI and UI Toolkit:
 
+Development additions: `editor collection-ui --action inspect_collection|reveal_item|set_collection_expanded`
+addresses a collection with `--document` and `--element-*`, plus `--collection`
+JSON. Existing inspect/wait/click/text/toggle/drag/scroll/hover commands accept
+`--collection` to address a realized row or its scoped child. For example:
+
+```bash
+unity-mcp editor collection-ui --action reveal_item --document RuntimeUI --element-name ships --collection '{"index":1700}'
+unity-mcp editor click-ui --ui-system ui_toolkit --document RuntimeUI --element-name ships --collection '{"index":1700,"query":{"element_name":"row-button"}}'
+unity-mcp editor click-ui --ui-system ui_toolkit --document TextureUI --position 0.25 0.75 --coordinate-space texture_uv
+unity-mcp editor click-ui --ui-system ui_toolkit --document TextureUI --position 0.4 0.6 --coordinate-space camera_viewport --surface '{"camera":"ViewCamera","target":"WorldScreen"}'
+```
+
+Tree IDs are engine IDs, not durable game identifiers; hidden parents need explicit
+`expand_ancestors=true`. Pure reads do not scroll or realize rows. Flat-panel
+mapping is `panel_normalized` (top-left) or `texture_uv` (bottom-left, target
+texture required). `camera_viewport` instead maps the explicit camera's top-left
+viewport coordinates through the named mesh's UV0 to that panel. `--surface`
+JSON requires `camera` and `target`, with optional `camera_search_method` and
+`target_search_method`. It also applies to hover, scroll and drag; drag starts and
+ends must both be coordinates. Supported Unlit materials, matching mesh/collider
+geometry and collider-occlusion limits are specified in the
+[mapping design](../development/RUNTIME_UI_EXTENSIONS.md#coordinate-mapping).
+Native world-space panel picking is not supported.
+
 ```bash
 mcp-for-unity editor play-ui-status
 mcp-for-unity editor inspect-ui --help
@@ -127,6 +151,14 @@ mcp-for-unity editor key-ui --help
 ```
 
 Inspect and wait before mutating. UI commands require Play Mode and a live target; successful transport alone does not prove the intended gameplay result.
+
+## Gameplay input
+
+For gameplay input, use `unity-mcp editor input status` and the bounded
+`key`, `move`, `click`, `drag`, `scroll`, `cancel` actions, separate from UI events.
+For example, `unity-mcp editor input key --key Space --duration 0.1`.
+See the [CLI input examples](../../Server/src/cli/CLI_USAGE_GUIDE.md#gameplay-input)
+and [input recovery contract](../development/PLAY_MODE_INPUT.md).
 
 ## Administrative receipt recovery
 

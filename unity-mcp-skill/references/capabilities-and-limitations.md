@@ -114,6 +114,9 @@ actions are:
 | `scroll_ui` | Dispatch a bounded two-axis wheel delta to the associated scroll container. |
 | `hover_ui` | UI Toolkit only: dispatch one mouse pointer move with no press/release. |
 | `key_ui` | UI Toolkit only: dispatch one named KeyDown/KeyUp pair through the current focus or document root. |
+| `inspect_collection` | UI Toolkit only: page logical collection IDs without realizing rows. |
+| `reveal_item` | Explicitly scroll to an item and wait for realization; ancestor expansion is opt-in. |
+| `set_collection_expanded` | Explicitly expand/collapse one TreeView node. |
 
 One `wait_ui` call owns exactly one Runtime-v1 request and one durable receipt.
 Its internal frame polls do not create additional transport commands or receipt
@@ -141,12 +144,48 @@ entries.
   the runtime panel and VisualElement event system.
 - Element queries traverse the physical VisualElement hierarchy, including
   currently realized `ListView` and `TreeView` template elements.
-- Pure normalized coordinates are supported only when a Screen Space panel has
-  an unambiguous Game View-to-panel mapping. RenderTexture and World Space panel
-  coordinates require an explicit mapping strategy and are not inferred.
-- Items that have not been realized by a virtualized collection are not present
-  in the Visual Tree and cannot be addressed by an element query. Item-index or
-  stable-item-ID collection addressing is not currently implemented.
+- RenderTexture coordinate actions require explicit `coordinate_space`:
+  `panel_normalized` is top-left; `texture_uv` is bottom-left and requires a target
+  texture. Both use the actual flat panel bounds, including for drag endpoints.
+  This dispatches panel events, not a camera/world raycast or hardware input.
+  Native world-space panel picking remains unsupported. Starting with v10.3.0,
+  explicit `camera_viewport` with `surface` is supported (see below).
+- Collection addressing is available starting with v10.3.0.
+  Element selectors identify a ListView/TreeView; `collection={"index":1700}` or
+  `collection={"id":20}` identifies a logical item. Tree indices refer to the
+  current visible flattened model; engine IDs are not persistent game IDs.
+  Optional `collection.query` scopes element selectors inside the realized row.
+- `inspect_collection` pages IDs including collapsed tree children with
+  `collection.offset` (0-100000) and `limit` (1-100). It does not read application
+  item values or change scroll, expansion, selection or binding.
+- Item inspection separates `itemExists`, `realized` and element `exists`.
+  Uncreated rows cannot receive input. Use explicit `reveal_item`, optionally
+  `expand_ancestors=true`, then inspect/click. `wait_ui(condition="realized")`
+  only observes. Reveal is one bounded asynchronous command/receipt, checks
+  identity during the wait and does not roll back partial scroll/expansion.
+  `set_collection_expanded` requires an explicit boolean `value`.
+
+### Camera/surface mapping
+
+`camera_viewport` requires top-left camera-relative `position` and
+`surface={"camera":"Camera", "target":"Screen"}`. Optional camera/target search
+methods are `by_id`, `by_name`, `by_path`; use unique IDs/paths. It applies to
+click, hover, scroll and drag, without element/collection selectors. It maps a
+real ray hit through UV0 into the flat RenderTexture panel, then uses normal UI
+events. `surfaceMapping` records the identities, world hit, UV and panel point.
+
+Only matching single-submesh MeshFilter/non-convex MeshCollider geometry and one
+MeshRenderer material are supported. Use `Unlit/Texture`, or opaque non-alpha-clipped
+`Universal Render Pipeline/Unlit`, bound to the exact document texture with identity
+tiling/offset. Property blocks and custom shader mappings fail explicitly.
+The nearest non-trigger 3D collider in the active mono camera's culling mask
+determines occlusion. This does not prove pixel visibility through camera stacks,
+missing colliders, transparency or shader effects. No application mapping callback
+or physics/device state is changed.
+
+Drag preflights and rechecks every requested sample (not a continuous sweep).
+Changes after PointerDown return partial event evidence; inspect before retrying.
+Read [mapping design and limits](../../docs/development/RUNTIME_UI_EXTENSIONS.md#coordinate-mapping).
 
 ### UI Toolkit click buttons
 
@@ -192,12 +231,31 @@ hardware/Input System device input or a direct application callback invocation.
   and composited Game View capture. Dispatch success alone does not prove the
   visible hover or product keyboard behavior.
 
-### Input boundary
+### Gameplay input
+
+Available starting with v10.3.0; use matching Unity package and server versions.
+
+`input_play_mode` is a separate bounded Input System device surface. Start with
+`status`; use `key`, `move`, `click`, `drag`, `scroll`, or ID-guarded `cancel`.
+It creates temporary virtual devices, queues normal Input System events and waits
+through player frames. It never injects OS events or resets physical devices.
+Key chords and button holds are limited to five seconds; the entire operation
+has a ten-second watchdog. One gesture runs per Editor, with one runtime receipt.
+
+Only Dynamic updates in stable unpaused Play Mode are supported. InputUser,
+PlayerInput and explicit device-filtered actions are rejected; the Bridge does
+not pair devices, rebind actions, change settings or switch Control Schemes.
+Pointer input requires an unlocked cursor. Do not combine human input with an
+active gesture. Inspect gameplay after a timeout/interruption before retrying.
+No gamepad, touch, IME, text, macros or Legacy Input Manager injection is provided.
+See [design, limits and recovery](../../docs/development/PLAY_MODE_INPUT.md).
+
+### UI input boundary
 
 Runtime UI interaction is not arbitrary input injection.
 
-- Beyond the bounded UI Toolkit events above, the Bridge does not synthesize a general keyboard key, mouse button,
-  touch contact, Input System device state, or operating-system event.
+- `interact_play_mode` does not synthesize device state or operating-system
+  input. Use the separately discovered `input_play_mode` only within its contract.
 - A game gate that reads `Keyboard.current`, `Mouse.current`, or touchscreen
   state directly cannot be advanced merely by dispatching a UI click when no UI
   target handles that click.
@@ -246,11 +304,16 @@ before an unavoidable external edit.
 These are observed defects in this fork, not accepted behavior. Analyze and fix
 the whole affected path rather than treating a partial result as success.
 
-### Raw Play Mode input is absent
+### Shared local server during opted-in batch Editor shutdown
 
-There is no bounded raw key or pointer-press primitive for gameplay code that
-reads device state directly. This currently blocks autonomous continuation of a
-non-UI intro gate.
+Observed on 2026-09-27: closing an isolated batch Editor connected to the same
+managed local HTTP server as an interactive Editor also stopped that server.
+The batch process had `UNITY_MCP_ALLOW_BATCH=1` to enable MCP. The shutdown
+cleanup uses the same flag to enable `StopManagedLocalHttpServer`; its ownership
+boundary needs separate investigation. Do not assume that opting into batch MCP
+isolates server shutdown. Keep a human restart path available, and prefer a
+dedicated server for future isolated live checks. This is not a ListView or
+RenderTexture behavior failure and was not repaired as part of that UI slice.
 
 ## Verification standard
 

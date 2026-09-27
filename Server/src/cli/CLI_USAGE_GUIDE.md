@@ -361,6 +361,15 @@ For implementation invariants, see `docs/development/COMMAND_RUNTIME_V1.md`.
 
 ## Runtime UI Interaction
 
+The development collection and RenderTexture extensions are documented in the
+[canonical CLI reference](../../../docs/reference/cli.md#runtime-ui-commands).
+Use `editor collection-ui --help`, existing UI commands' `--collection` option,
+and pointer commands' `--coordinate-space`. For `camera_viewport`, also provide
+`--surface '{"camera":"ViewCamera","target":"WorldScreen"}'` and camera-relative
+`--position X Y`. Mapping uses supported mesh/material UV0 plus non-trigger 3D
+collider occlusion, not final rendered-pixel visibility. Inspection never implicitly
+realizes rows; native world-space panel picking is not supported.
+
 Use the editor group for bounded uGUI and UI Toolkit interaction in Play Mode:
 
 ```bash
@@ -378,6 +387,29 @@ unity-mcp editor key-ui --help
 ```
 
 Prefer inspection and bounded waits over arbitrary sleeps. A command response confirms bridge execution, not the final gameplay outcome.
+
+## Gameplay input
+
+Use `editor input`, not UI-event commands, for Input System device polling:
+
+```bash
+unity-mcp editor input status
+unity-mcp editor input key --key Space --duration 0.1
+unity-mcp editor input key --key LeftShift --key W --duration 0.5
+unity-mcp editor input move --delta 12 -5
+unity-mcp editor input click --position 0.3 0.7 --button right
+unity-mcp editor input drag --position 0.2 0.2 --end-position 0.8 0.7 --steps 8 --duration 1
+unity-mcp editor input scroll --position 0.5 0.5 --scroll-delta 0 -2
+unity-mcp editor input cancel --operation-id <id-from-status>
+```
+
+Positions are normalized top-left Game View coordinates; delta/scroll use positive
+Y upward. Input is limited to stable unpaused Play Mode, Dynamic Input System
+updates and unpaired devices. Respect existing Game View focus policy; no settings
+are changed by the tool. Holds are bounded to five seconds, whole gestures to ten.
+One gesture/receipt per Editor; after interruption inspect gameplay before retrying.
+Cancellation releases only temporary Bridge devices, not physical input. See
+[design and recovery](../../../docs/development/PLAY_MODE_INPUT.md).
 
 ## Command Reference by Category
 

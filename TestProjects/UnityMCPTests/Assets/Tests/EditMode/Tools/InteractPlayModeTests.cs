@@ -52,6 +52,30 @@ namespace MCPForUnityTests.Editor.Tools
 
         [TestCase(1)]
         [TestCase(false)]
+        public async Task Collection_RejectsInvalidIndexTypes(object index)
+        {
+            var request = new JObject { ["action"] = "reveal_item", ["ui_system"] = "ui_toolkit",
+                ["collection"] = new JObject { ["index"] = JToken.FromObject(index) } };
+            if (index is int) request["collection"]["id"] = 1;
+            JObject result = ToJObject(await InteractPlayMode.HandleCommandAsync(request));
+            Assert.AreEqual("invalid_collection_parameters", result.Value<string>("code"));
+        }
+
+        [TestCase("inspect_collection", "{\"limit\":101}")]
+        [TestCase("inspect_collection", "{\"offset\":100001}")]
+        [TestCase("reveal_item", "{\"index\":-1}")]
+        [TestCase("reveal_item", "{\"id\":1,\"expand_ancestors\":\"true\"}")]
+        [TestCase("inspect_ui", "{\"id\":1,\"query\":{}}")]
+        [TestCase("set_collection_expanded", "{\"id\":1}")]
+        public async Task Collection_RejectsInvalidOptions(string action, string address)
+        {
+            var request = new JObject { ["action"] = action, ["ui_system"] = "ui_toolkit", ["collection"] = JObject.Parse(address) };
+            JObject result = ToJObject(await InteractPlayMode.HandleCommandAsync(request));
+            Assert.AreEqual("invalid_collection_parameters", result.Value<string>("code"));
+        }
+
+        [TestCase(1)]
+        [TestCase(false)]
         public void ClickButton_RejectsNonString(object button)
         {
             JObject result = Execute("click_ui", new JObject { ["button"] = JToken.FromObject(button) });
@@ -293,6 +317,19 @@ namespace MCPForUnityTests.Editor.Tools
 
             Assert.IsTrue(result.Success);
             Assert.AreSame(realizedButton, result.Element);
+        }
+
+        [TestCase("{}")]
+        [TestCase("[]")]
+        [TestCase("{\"camera\":\"Cam\"}")]
+        [TestCase("{\"camera\":true,\"target\":\"Screen\"}")]
+        [TestCase("{\"camera\":\"Cam\",\"target\":\"Screen\",\"uv\":1}")]
+        [TestCase("{\"camera\":\"Cam\",\"target\":\"Screen\",\"target_search_method\":\"wrong\"}")]
+        public void SurfaceMapping_RejectsInvalidOptionsBeforePlayMode(string surface)
+        {
+            JObject result = Execute("click_ui", new JObject { ["ui_system"] = "ui_toolkit", ["document"] = "UI",
+                ["position"] = new JArray(0.5, 0.5), ["coordinate_space"] = "camera_viewport", ["surface"] = JToken.Parse(surface) });
+            Assert.AreEqual("invalid_coordinate_space", result.Value<string>("code"), result.ToString());
         }
 
         private sealed class PhysicalHierarchyContainer : VisualElement

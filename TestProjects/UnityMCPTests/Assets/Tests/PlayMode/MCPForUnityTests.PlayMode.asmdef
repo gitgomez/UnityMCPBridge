@@ -4,6 +4,7 @@
   "references": [
     "MCPForUnity.Editor",
     "MCPForUnity.Runtime",
+    "Unity.InputSystem",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

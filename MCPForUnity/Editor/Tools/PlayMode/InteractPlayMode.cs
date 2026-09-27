@@ -28,6 +28,9 @@ namespace MCPForUnity.Editor.Tools.PlayMode
             "scroll_ui",
             "hover_ui",
             "key_ui",
+            "inspect_collection",
+            "reveal_item",
+            "set_collection_expanded",
         };
 
         private const BindingFlags InstanceMembers =
@@ -63,6 +66,11 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 object buttonError = ValidateClickButton(p, action, uiSystem);
                 if (buttonError != null)
                     return buttonError;
+                object collectionError = PlayModeUiToolkitActions.ValidateCollection(p, action, uiSystem);
+                if (collectionError != null)
+                    return collectionError;
+                object mappingError = PlayModeUiToolkitActions.ValidateCoordinateSpace(p, action, uiSystem);
+                if (mappingError != null) return mappingError;
                 if ((action == "hover_ui" || action == "key_ui")
                     && uiSystem != "ui_toolkit")
                 {
@@ -117,7 +125,7 @@ namespace MCPForUnity.Editor.Tools.PlayMode
         public static async Task<object> HandleCommandAsync(JObject @params)
         {
             string action = @params?["action"]?.ToString()?.ToLowerInvariant();
-            if (action != "wait_ui")
+            if (action != "wait_ui" && action != "reveal_item")
             {
                 return HandleCommand(@params);
             }
@@ -128,6 +136,13 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                 object buttonError = ValidateClickButton(p, action, p.Get("ui_system") ?? "ugui");
                 if (buttonError != null)
                     return buttonError;
+                object collectionError = PlayModeUiToolkitActions.ValidateCollection(p, action, p.Get("ui_system") ?? "ugui");
+                if (collectionError != null)
+                    return collectionError;
+                object mappingError = PlayModeUiToolkitActions.ValidateCoordinateSpace(p, action, p.Get("ui_system") ?? "ugui");
+                if (mappingError != null) return mappingError;
+                if (action == "reveal_item")
+                    return await PlayModeUiToolkitActions.RevealItemAsync(p);
                 return await PlayModeUiWaitActions.WaitAsync(@params);
             }
             catch (Exception ex)
@@ -136,9 +151,9 @@ namespace MCPForUnity.Editor.Tools.PlayMode
                     && invocation.InnerException != null
                         ? invocation.InnerException
                         : ex;
-                McpLog.Error($"[InteractPlayMode] Action 'wait_ui' failed: {ex}");
+                McpLog.Error($"[InteractPlayMode] Action '{action}' failed: {ex}");
                 return new ErrorResponse(
-                    $"Play Mode interaction 'wait_ui' failed: {reported.Message}");
+                    $"Play Mode interaction '{action}' failed: {reported.Message}");
             }
         }
 

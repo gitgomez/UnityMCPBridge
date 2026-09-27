@@ -22,6 +22,9 @@ PlayModeInteractionAction = Literal[
     "scroll_ui",
     "hover_ui",
     "key_ui",
+    "inspect_collection",
+    "reveal_item",
+    "set_collection_expanded",
 ]
 PlayModeSearchMethod = Literal["by_id", "by_name", "by_path"]
 PlayModeUiSystem = Literal["ugui", "ui_toolkit"]
@@ -43,6 +46,7 @@ PlayModeWaitCondition = Literal[
     "text_contains",
     "toggle_equals",
     "hovered",
+    "realized",
 ]
 ALL_ACTIONS: list[str] = list(get_args(PlayModeInteractionAction))
 ALL_WAIT_CONDITIONS: list[str] = list(get_args(PlayModeWaitCondition))
@@ -82,9 +86,13 @@ _MAX_SCROLL_DELTA = 100.0
         "typing text, or changing device state. Tab/Return do not imply navigation "
         "or submit. uGUI pointer actions accept a GameObject target or "
         "normalized Game View coordinates. UI Toolkit pointer actions accept an "
-        "element query or normalized screen-space panel coordinates. Coordinates "
-        "use a top-left origin. Mutating actions can cause gameplay or external "
-        "side effects."
+        "element query or explicit panel, texture-UV or camera-viewport coordinates. "
+        "Only texture_uv uses a bottom-left origin; other spaces are top-left. "
+        "Mutating actions can cause gameplay or external "
+        "side effects. inspect_collection pages logical ListView/TreeView items "
+        "without realization. collection addresses an item by index or engine ID; "
+        "reveal_item explicitly scrolls and waits for realization, with optional "
+        "ancestor expansion. set_collection_expanded changes one tree node."
     ),
     annotations=ToolAnnotations(
         title="Interact With Play Mode",
@@ -105,7 +113,7 @@ async def interact_play_mode(
     ] = None,
     position: Annotated[
         Optional[list[float]],
-        "Normalized top-left-origin [x,y] position for pointer actions, including UI Toolkit hover_ui.",
+        "Normalized [x,y] pointer position. Top-left by default or camera_viewport; bottom-left only for texture_uv. See coordinate_space.",
     ] = None,
     search_method: Annotated[
         Optional[PlayModeSearchMethod],
@@ -173,7 +181,7 @@ async def interact_play_mode(
     ] = None,
     end_position: Annotated[
         Optional[list[float]],
-        "Required normalized top-left-origin [x,y] destination for drag_ui.",
+        "Required normalized [x,y] destination for drag_ui, in the same coordinate_space as its start.",
     ] = None,
     steps: Annotated[
         int,
@@ -194,6 +202,18 @@ async def interact_play_mode(
     button: Annotated[
         Optional[Literal["left", "right"]],
         "Mouse button for click_ui only. Omitted/null means left; right requires ui_system='ui_toolkit'.",
+    ] = None,
+    collection: Annotated[
+        Optional[dict[str, Any]],
+        "UI Toolkit collection address: exactly one index or engine id; optional query scopes element_* selectors inside a realized row. inspect_collection accepts offset (0-100000) and limit (1-100). reveal_item optionally accepts expand_ancestors=true. Inspection never realizes items. IDs are not persistent game IDs.",
+    ] = None,
+    coordinate_space: Annotated[
+        Optional[Literal["panel_normalized", "texture_uv", "camera_viewport"]],
+        "UI Toolkit position/drag space: panel_normalized is top-left; texture_uv is bottom-left. camera_viewport is top-left relative to an explicit camera and requires surface. No device input or native world-space panel picking.",
+    ] = None,
+    surface: Annotated[
+        Optional[dict[str, Any]],
+        "For camera_viewport only: camera and target identify GameObjects; optional camera_search_method/target_search_method use by_id, by_name or by_path. Requires a matching non-convex MeshCollider/MeshFilter, one MeshRenderer material, UV0, and Unlit/Texture or Universal Render Pipeline/Unlit bound to the document RenderTexture with identity tiling. Occlusion checks non-trigger 3D colliders in the camera mask, not rendered pixels.",
     ] = None,
 ) -> dict:
     """Dispatch bounded Play Mode UI inspection, waiting, and interaction."""
@@ -229,6 +249,9 @@ async def interact_play_mode(
         key_code=key_code,
         modifiers=modifiers,
         button=button,
+        collection=collection,
+        coordinate_space=coordinate_space,
+        surface=surface,
     )
     if validation_error is not None:
         return validation_error
@@ -257,6 +280,12 @@ async def interact_play_mode(
         params["element_index"] = element_index
     if button is not None:
         params["button"] = button
+    if collection is not None:
+        params["collection"] = collection
+    if coordinate_space is not None:
+        params["coordinate_space"] = coordinate_space
+    if surface is not None:
+        params["surface"] = surface
     if action_lower == "inspect_ui":
         params["include_text"] = include_text
     elif action_lower == "wait_ui":
@@ -277,8 +306,10 @@ async def interact_play_mode(
                 "sensitive": sensitive,
             }
         )
-    elif action_lower == "set_toggle":
+    elif action_lower in {"set_toggle", "set_collection_expanded"}:
         params["value"] = value
+    elif action_lower == "reveal_item":
+        params["timeout_seconds"] = timeout_seconds
     elif action_lower == "drag_ui":
         params.update(
             {
@@ -321,6 +352,9 @@ def _validate_parameters(
     key_code: str | None = None,
     modifiers: list[str] | None = None,
     button: str | None = None,
+    collection: dict[str, Any] | None = None,
+    coordinate_space: str | None = None,
+    surface: dict[str, Any] | None = None,
 ) -> dict | None:
     if ui_system not in {"ugui", "ui_toolkit"}:
         return _error(
@@ -335,6 +369,15 @@ def _validate_parameters(
             return _error("invalid_click_parameters", "button is only supported for click_ui.")
         if button == "right" and ui_system != "ui_toolkit":
             return _error("ui_toolkit_required", "Right click requires ui_system='ui_toolkit'.")
+
+    collection_error = validate_collection_parameters(action, ui_system, collection, value, timeout_seconds)
+    if collection_error:
+        return _error("invalid_collection_parameters", collection_error)
+    if collection is not None and position is not None:
+        return _error("invalid_collection_parameters", "collection requires an element query, not position.")
+    mapping_error = validate_coordinate_space(action, ui_system, coordinate_space, position, surface)
+    if mapping_error:
+        return _error("invalid_coordinate_space", mapping_error)
 
     if action in {"hover_ui", "key_ui"} and ui_system != "ui_toolkit":
         return _error(
@@ -389,6 +432,9 @@ def _validate_parameters(
         "wait_ui",
         "set_text",
         "set_toggle",
+        "inspect_collection",
+        "reveal_item",
+        "set_collection_expanded",
     }
     if ui_system == "ugui" and pointer_action:
         has_target = target is not None and bool(target.strip())
@@ -521,6 +567,8 @@ def _validate_parameters(
         )
 
     if action == "wait_ui":
+        if condition == "realized" and (ui_system != "ui_toolkit" or collection is None):
+            return _error("invalid_wait_condition", "realized requires a UI Toolkit collection item address.")
         if condition == "hovered" and ui_system != "ui_toolkit":
             return _error("ui_toolkit_required", "The hovered condition requires ui_system='ui_toolkit'.")
         if condition not in ALL_WAIT_CONDITIONS:
@@ -557,6 +605,70 @@ def _validate_parameters(
                 "invalid_poll_interval",
                 f"poll_interval_seconds must be between {_MIN_POLL_INTERVAL_SECONDS} and {_MAX_POLL_INTERVAL_SECONDS}.",
             )
+    return None
+
+
+def validate_coordinate_space(action, ui_system, coordinate_space, position, surface=None) -> str | None:
+    if surface is not None and coordinate_space != "camera_viewport":
+        return "surface requires coordinate_space='camera_viewport'."
+    if coordinate_space is None:
+        return None
+    if coordinate_space not in {"panel_normalized", "texture_uv", "camera_viewport"} or ui_system != "ui_toolkit":
+        return "coordinate_space must be panel_normalized, texture_uv or camera_viewport and requires UI Toolkit."
+    if action not in {"click_ui", "hover_ui", "scroll_ui", "drag_ui"} or (position is None and action != "drag_ui"):
+        return "coordinate_space requires a coordinate pointer action or a drag endpoint."
+    if coordinate_space == "camera_viewport":
+        if position is None or not isinstance(surface, dict):
+            return "camera_viewport requires position and a surface object."
+        if set(surface) - {"camera", "target", "camera_search_method", "target_search_method"}:
+            return "surface contains unknown options."
+        for field in ("camera", "target"):
+            if not isinstance(surface.get(field), str) or not surface[field].strip():
+                return f"surface.{field} must be a non-empty GameObject address."
+            method = surface.get(f"{field}_search_method")
+            if method is not None and (not isinstance(method, str) or method not in {"by_id", "by_name", "by_path"}):
+                return f"surface.{field}_search_method must be by_id, by_name or by_path."
+    return None
+
+
+def validate_collection_parameters(action, ui_system, collection, value=None, timeout_seconds=5.0) -> str | None:
+    """Shared MCP/CLI validation; Unity also validates direct command requests."""
+    actions = {"inspect_collection", "reveal_item", "set_collection_expanded"}
+    if collection is None:
+        return "collection is required for this action." if action in actions - {"inspect_collection"} else (
+            "Collection actions require ui_system='ui_toolkit'." if action in actions and ui_system != "ui_toolkit" else None
+        )
+    if ui_system != "ui_toolkit" or action in {"ping", "key_ui"}:
+        return "collection requires a UI Toolkit element action."
+    if not isinstance(collection, dict):
+        return "collection must be an object."
+    allowed = {"offset", "limit"} if action == "inspect_collection" else {"id", "index", "query"}
+    if action == "reveal_item":
+        allowed |= {"expand_ancestors"}
+    if action == "set_collection_expanded":
+        allowed -= {"query"}
+    if collection.keys() - allowed:
+        return "Unsupported collection fields for this action."
+    if action != "inspect_collection" and (("id" in collection) == ("index" in collection)):
+        return "Provide exactly one collection id or index."
+    for key, minimum, maximum in (("id", -2147483648, 2147483647), ("index", 0, 2147483647), ("offset", 0, 100000), ("limit", 1, 100)):
+        if key in collection and (type(collection[key]) is not int or not minimum <= collection[key] <= maximum):
+            return f"collection.{key} must be an integer between {minimum} and {maximum}."
+    query = collection.get("query")
+    if "query" in collection:
+        if not isinstance(query, dict) or query.keys() - {"element_name", "element_class", "element_type", "element_index"}:
+            return "collection.query must contain only element_* selectors."
+        selectors = [query.get(k) for k in ("element_name", "element_class", "element_type") if k in query]
+        if not selectors or any(not isinstance(v, str) or not v.strip() for v in selectors):
+            return "collection.query requires a non-empty element selector."
+        if "element_index" in query and (type(query["element_index"]) is not int or not 0 <= query["element_index"] <= 1023):
+            return "collection.query.element_index must be between 0 and 1023."
+    if "expand_ancestors" in collection and type(collection["expand_ancestors"]) is not bool:
+        return "collection.expand_ancestors must be boolean."
+    if action == "set_collection_expanded" and type(value) is not bool:
+        return "set_collection_expanded requires a boolean value."
+    if action == "reveal_item" and (not _is_finite_number(timeout_seconds) or not 0.1 <= float(timeout_seconds) <= 30):
+        return "reveal_item timeout_seconds must be between 0.1 and 30."
     return None
 
 

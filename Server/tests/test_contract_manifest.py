@@ -57,13 +57,14 @@ def test_manifest_covers_the_complete_public_surface():
     manifest = _load_manifest()
     names = [entry["name"] for entry in manifest["tools"]]
 
-    assert len(names) == 53
+    assert len(names) == 54
     assert names == sorted(names)
     assert len(names) == len(set(names))
     assert "create_script" in names
     assert "audit_project" in names
     assert "inspect_dependencies" in names
     assert "interact_play_mode" in names
+    assert "input_play_mode" in names
     assert "manage_addressables" in names
     assert "manage_input" in names
     assert "execute_custom_tool" in names
@@ -100,4 +101,4 @@ def test_manifest_checker_detects_surface_and_generated_hash_drift():
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Validated 53 tool contracts" in result.stdout
+    assert "Validated 54 tool contracts" in result.stdout

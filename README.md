@@ -60,6 +60,12 @@ The fork develops the bridge in three practical areas:
   operate runtime uGUI and UI Toolkit without driving the operating-system
   mouse. Its bounded actions cover clicks, drag and scroll gestures, text and
   toggle input, UI Toolkit hover and key events, and state-based waiting.
+  Virtualized ListView/TreeView rows can be inspected by index or item ID and
+  explicitly revealed, including opt-in tree expansion. RenderTexture panels
+  accept panel coordinates, texture UVs, or camera rays onto a declared mesh.
+  The separate `input_play_mode` tool supplies bounded keyboard/chord and mouse
+  gestures through temporary Unity Input System devices for ordinary gameplay
+  polling and compatible InputActions, with status and ID-guarded cancellation.
   Camera tooling can capture the fully composited Game View, including runtime
   overlays, and the Python CLI exposes matching operations for repeatable use
   outside an MCP conversation.
@@ -84,6 +90,35 @@ The authoritative built-in surface is
 [fork guide](docs/getting-started/bridge-fork.md) explains the operational
 differences in detail.
 
+## What's new in v10.3.0
+
+This release brings the built-in catalog to **54 MCP tool entrypoints**:
+
+- **Virtualized UI:** inspect logical ListView/TreeView items without scrolling
+  or selecting them; reveal rows explicitly, wait for realization, then operate
+  a control within that row.
+- **Mapped runtime panels:** operate flat RenderTexture UI using explicit
+  panel/UV coordinates or a camera-to-mesh raycast with collider occlusion
+  checks. Native world-space UI Toolkit picking is **not supported**; the mesh
+  path has explicit geometry, material and texture-mapping requirements.
+- **Gameplay input:** `input_play_mode` supports keys/chords, mouse movement,
+  three click buttons, drag and wheel gestures. Holds are capped at five
+  seconds, with one active gesture per Editor and cancellation tied to its ID.
+  Physical devices are never reset or driven, and no OS input is injected.
+
+Gameplay input requires the optional Unity Input System, Dynamic updates and
+stable unpaused Play Mode. Pointer gestures require an unlocked cursor and
+the project's existing Game View focus policy. PlayerInput/InputUser pairing,
+explicit device-filtered actions, legacy input, gamepad, touch and IME are not
+supported. The new paths were verified on Windows with Unity `6000.3.9f1` and
+Input System `1.18.0`; that is not a claim of testing every Unity 6 version.
+
+See [runtime UI details and limits](docs/development/RUNTIME_UI_EXTENSIONS.md),
+[gameplay input and recovery](docs/development/PLAY_MODE_INPUT.md), and the
+[CLI examples](Server/src/cli/CLI_USAGE_GUIDE.md#gameplay-input).
+The known [shared-server batch shutdown issue](unity-mcp-skill/references/capabilities-and-limitations.md#shared-local-server-during-opted-in-batch-editor-shutdown)
+is separate and remains open; use a dedicated server for isolated live tests.
+
 ## Prerequisites
 
 - Unity `6000.0` or newer; see the
@@ -100,13 +135,13 @@ differences in detail.
 In Unity, open **Window → Package Manager → Add package from git URL** and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.2.9
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.3.0
 ```
 
 The package selects the matching server source:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.2.9#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.3.0#subdirectory=Server
 ```
 
 Do not mix a fork package with the upstream PyPI server. Keep both URLs on the
@@ -129,7 +164,7 @@ Python server (Server/)
 Unity Editor package (MCPForUnity/)
     │
     ▼
-Scenes, assets, scripts, tests, runtime UI
+Scenes, assets, scripts, tests, runtime UI and bounded gameplay input
 ```
 
 Useful entry points:
@@ -139,7 +174,7 @@ Useful entry points:
 - [Unity compatibility](docs/architecture/unity-compat.md)
 - [Transport architecture](docs/architecture/transports.md)
 - [Troubleshooting](docs/guides/troubleshooting.md)
-- [All 53 MCP tool entrypoints](docs/reference/tools/index.md)
+- [All 54 MCP tool entrypoints](docs/reference/tools/index.md)
 - [CLI reference](docs/reference/cli.md)
 
 ## Contributions
