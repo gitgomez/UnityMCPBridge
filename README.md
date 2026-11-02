@@ -134,7 +134,10 @@ Git/uvx installations as well as the checked-in server lockfile. The server now
 requires **Python 3.11+** because the fixed dnspython release no longer supports
 Python 3.10. Install a supported interpreter with `uv python install 3.11` if needed.
 
-Use a matched v10.4.0 package/server and discover negotiated capabilities. Read
+The v10.4.1 security follow-up also requires joserfc 1.7.6 or newer to address
+its compact-JWS allocation vulnerability.
+
+Use a matched v10.4.1 package/server and discover negotiated capabilities. Read
 [diagnostic limits and safe recovery](docs/development/EDITOR_DIAGNOSTICS.md).
 
 ## Prerequisites
@@ -153,13 +156,13 @@ Use a matched v10.4.0 package/server and discover negotiated capabilities. Read
 In Unity, open **Window → Package Manager → Add package from git URL** and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.4.0
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.4.1
 ```
 
 The package selects the matching server source:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.4.0#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.4.1#subdirectory=Server
 ```
 
 Do not mix a fork package with the upstream PyPI server. Keep both URLs on the

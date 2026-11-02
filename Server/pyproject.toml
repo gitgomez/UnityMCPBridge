@@ -1,6 +1,6 @@
 [project]
 name = "mcpforunityserver"
-version = "10.4.0"
+version = "10.4.1"
 description = "MCP for Unity Server: A Unity package for Unity Editor integration via the Model Context Protocol (MCP)."
 readme = "README.md"
 license = "MIT"
@@ -46,6 +46,7 @@ dependencies = [
  "opentelemetry-api>=1.45.1,<2",
  "certifi>=2026.10.19",
  "dnspython>=2.9.0,<3",
+ "joserfc>=1.7.6,<2",
 ]
 
 [project.optional-dependencies]
