@@ -292,8 +292,14 @@ no recognized severity flag; attached stack-trace text never changes severity.
 ## Native dialogs and loaded YAML
 
 A native Unity modal dialog can block the Editor main thread and therefore the
-MCP dispatcher. An already-open native dialog cannot be reliably confirmed or
-dismissed through the Bridge.
+MCP dispatcher. Matched peers from `v10.4.0` negotiating `editor_diagnostics_v1`
+and `compile_diagnostics_v1` expose `mcpforunity://editor/diagnostics` on the
+independent control path. It can observe a stalled heartbeat and bounded native
+Windows modal candidates, even while the normal dispatcher is blocked. This
+does not guarantee detection of every dialog and never answers or dismisses
+one. Unsupported, incomplete, stale and failed probes are not an all-clear.
+See the
+[diagnostic and safe recovery contract](../../docs/development/EDITOR_DIAGNOSTICS.md).
 
 Do not externally modify a loaded `.unity` scene or an open `.prefab` stage.
 Perform those changes through Unity/MCP, or close and save the affected context
@@ -301,19 +307,26 @@ before an unavoidable external edit.
 
 ## Known current defects
 
-These are observed defects in this fork, not accepted behavior. Analyze and fix
-the whole affected path rather than treating a partial result as success.
+This section records observed defects and the release that addresses them.
+Read the remaining verification limits before relying on a repaired path.
 
 ### Shared local server during opted-in batch Editor shutdown
 
 Observed on 2026-09-27: closing an isolated batch Editor connected to the same
 managed local HTTP server as an interactive Editor also stopped that server.
 The batch process had `UNITY_MCP_ALLOW_BATCH=1` to enable MCP. The shutdown
-cleanup uses the same flag to enable `StopManagedLocalHttpServer`; its ownership
-boundary needs separate investigation. Do not assume that opting into batch MCP
-isolates server shutdown. Keep a human restart path available, and prefer a
-dedicated server for future isolated live checks. This is not a ListView or
-RenderTexture behavior failure and was not repaired as part of that UI slice.
+cleanup used globally shared tracking and launch-handshake preferences, allowing
+another Editor to inherit apparent ownership. This is not a ListView or
+RenderTexture failure and remains a limitation of the published `v10.3.0` tag.
+
+The `v10.4.0` repair uses project-scoped tracking, per-process
+`SessionState` launch ownership and an authenticated atomic server-side
+shared-use/admission guard. Stop, restart and quit paths refuse uncertain or
+shared ownership without a heuristic kill fallback. See
+[managed ownership and recovery](../../docs/development/EDITOR_DIAGNOSTICS.md#managed-local-server-ownership).
+Do not assume the repair is installed without matched runtime verification;
+keep a coordinated operator shutdown/restart path available. A protocol peer
+check is not proof of every two-Editor shutdown scenario.
 
 ## Verification standard
 

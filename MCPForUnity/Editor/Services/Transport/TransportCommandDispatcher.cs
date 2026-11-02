@@ -40,6 +40,8 @@ namespace MCPForUnity.Editor.Services.Transport
         private static SynchronizationContext _mainThreadContext;
         private static int _mainThreadId;
         private static int _processingFlag;
+        private static readonly AsyncLocal<string> RequestContext = new();
+        internal static string CurrentRequestId => RequestContext.Value;
 
         private sealed class PendingCommand
         {
@@ -93,6 +95,21 @@ namespace MCPForUnity.Editor.Services.Transport
         private static long runtimeQueuedPayloadBytes;
         private static bool updateHooked;
         private static bool initialised;
+
+        internal static JObject QueueDiagnostics()
+        {
+            lock (PendingLock)
+            {
+                int queued = 0, executing = 0;
+                foreach (var command in Pending.Values)
+                {
+                    if (command.IsExecuting) executing++; else queued++;
+                }
+                return new JObject { ["queued"] = queued, ["executing"] = executing,
+                    ["runtime_payload_bytes"] = runtimeQueuedPayloadBytes,
+                    ["pump_active"] = Volatile.Read(ref _processingFlag) != 0 };
+            }
+        }
 
         static TransportCommandDispatcher()
         {
@@ -509,7 +526,14 @@ namespace MCPForUnity.Editor.Services.Transport
 
                 var logType = resourceMeta != null ? "resource" : toolMeta != null ? "tool" : "unknown";
                 var sw = McpLogRecord.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
-                var result = CommandRegistry.ExecuteCommand(command.type, parameters, pending.CompletionSource);
+                object result;
+                string previousRequest = RequestContext.Value;
+                try
+                {
+                    RequestContext.Value = command.runtime_request_id;
+                    result = CommandRegistry.ExecuteCommand(command.type, parameters, pending.CompletionSource);
+                }
+                finally { RequestContext.Value = previousRequest; }
 
                 if (result == null)
                 {

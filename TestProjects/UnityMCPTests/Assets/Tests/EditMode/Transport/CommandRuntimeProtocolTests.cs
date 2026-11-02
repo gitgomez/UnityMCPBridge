@@ -30,7 +30,9 @@ namespace MCPForUnityTests.Editor.Transport
                     "stable_handles_v1",
                     "state_revisions_v1",
                     "batch_semantics_v1",
-                    "reload_lifecycle_v1"
+                    "reload_lifecycle_v1",
+                    "editor_diagnostics_v1",
+                    "compile_diagnostics_v1"
                 },
                 ((JArray)advertisement["capabilities"]).Values<string>());
             Assert.IsTrue(advertisement.Value<bool>("legacy_fallback"));

@@ -64,6 +64,24 @@ async def _wait_for_sends(websocket: AsyncMock, expected: int) -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_editor_diagnostics_bypasses_full_normal_queue(configured_hub):
+    websocket = await _connect_runtime_session(configured_hub)
+    tasks = [asyncio.create_task(PluginHub.send_command("runtime-session", "ping", {}))
+             for _ in range(MAX_QUEUED_COMMANDS)]
+    await _wait_for_sends(websocket, MAX_QUEUED_COMMANDS)
+    observation = asyncio.create_task(PluginHub.query_editor_diagnostics("runtime-session"))
+    await _wait_for_sends(websocket, MAX_QUEUED_COMMANDS + 1)
+    frame = websocket.send_json.await_args.args[0]
+    assert frame["type"] == "editor_diagnostics"
+    assert "runtime" not in frame and "request_id" not in frame
+    PluginHub._pending[frame["id"]]["future"].set_result({"result": {"success": True, "data": {"queue": {"queued": 64}}}})
+    assert (await observation)["success"] is True
+    _complete_sent_commands(websocket)
+    await asyncio.gather(*tasks)
+    assert (await configured_hub.shutdown_status("runtime-hash"))["commands_in_flight"] == 0
+
+
 def _complete_sent_commands(websocket: AsyncMock) -> None:
     for call in websocket.send_json.await_args_list:
         command_id = call.args[0]["id"]
@@ -101,6 +119,7 @@ async def test_runtime_rejects_sixty_fifth_command_without_sending_or_storing_it
 async def test_legacy_session_keeps_existing_unbounded_admission_behavior(
     configured_hub: PluginRegistry,
 ):
+    await configured_hub.register("legacy-session", "Legacy", "legacy-hash", "6000.3.9f1")
     websocket = AsyncMock()
     PluginHub._connections["legacy-session"] = websocket
     command_count = MAX_QUEUED_COMMANDS + 1

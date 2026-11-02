@@ -415,6 +415,31 @@ def create_mcp_server(project_scoped_tools: bool) -> FastMCP:
 
     # Only expose CLI routes if running locally (not in remote hosted mode)
     if not config.http_remote_hosted:
+        @mcp.custom_route("/api/editor-diagnostics", methods=["POST"])
+        async def editor_diagnostics_route(request: Request) -> JSONResponse:
+            from services.resources.editor_diagnostics import enrich_diagnostics
+            try:
+                body = await request.json()
+                if not isinstance(body, dict):
+                    return JSONResponse({"success": False, "code": "INVALID_REQUEST"}, status_code=400)
+                instance = body.get("unity_instance")
+                if instance is not None and not isinstance(instance, str):
+                    return JSONResponse({"success": False, "code": "INVALID_INSTANCE"}, status_code=400)
+                session = await PluginHub._resolve_session_id(instance, retry_on_reload=False)
+                return JSONResponse(enrich_diagnostics(await PluginHub.query_editor_diagnostics(session)))
+            except InstanceSelectionRequiredError as exc:
+                return JSONResponse({"success": False, "error": str(exc),
+                                     "available_instances": exc.available_instances}, status_code=409)
+            except NoUnitySessionError as exc:
+                return JSONResponse({"success": False, "error": str(exc)}, status_code=503)
+            except (ValueError, TypeError):
+                return JSONResponse({"success": False, "code": "INVALID_REQUEST"}, status_code=400)
+
+        @mcp.custom_route("/api/server-control", methods=["POST"])
+        async def server_control_route(request: Request) -> JSONResponse:
+            from services.managed_server_control import managed_server_control
+            return await managed_server_control(request, lambda: _plugin_registry)
+
         @mcp.custom_route("/api/command", methods=["POST"])
         async def cli_command_route(request: Request) -> JSONResponse:
             """REST endpoint for CLI commands to Unity."""

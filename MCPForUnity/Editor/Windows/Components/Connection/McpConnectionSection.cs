@@ -42,6 +42,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
         private Label httpServerCommandHint;
         private TextField httpUrlField;
         private Button startHttpServerButton;
+        private HelpBox httpServerStopWarning;
         private VisualElement unitySocketPortRow;
         private TextField unityPortField;
         private VisualElement statusIndicator;
@@ -103,6 +104,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             httpServerCommandHint = Root.Q<Label>("http-server-command-hint");
             httpUrlField = Root.Q<TextField>("http-url");
             startHttpServerButton = Root.Q<Button>("start-http-server-button");
+            httpServerStopWarning = Root.Q<HelpBox>("http-server-stop-warning");
             unitySocketPortRow = Root.Q<VisualElement>("unity-socket-port-row");
             unityPortField = Root.Q<TextField>("unity-port");
             statusIndicator = Root.Q<VisualElement>("status-indicator");
@@ -652,6 +654,10 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             // Server button only controls server lifecycle (Start/Stop Server).
             // Session lifecycle is handled by the separate connectionToggleButton.
             bool shouldShowStop = localServerRunning;
+            if (!localServerRunning)
+            {
+                SetServerStopWarning(null);
+            }
             bool launchPending = httpServerToggleInProgress || HttpAutoStartHandler.IsConnectPending;
             // While we are launching+connecting and the server isn't up yet, show a transient "Starting…" label.
             if (launchPending && !localServerRunning)
@@ -698,19 +704,24 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
                 if (serverRunning)
                 {
-                    // Stop Server: end session first (if active), then stop the server.
-                    if (bridgeService.IsRunning)
-                    {
-                        await bridgeService.StopAsync();
-                    }
-                    bool stopped = MCPServiceLocator.Server.StopLocalHttpServer();
+                    // Admission may refuse an unowned/shared server. Preserve our session
+                    // until the server has actually stopped.
+                    bool stopped = await StopServerAndSessionAsync(
+                        () => MCPServiceLocator.Server.StopLocalHttpServer(),
+                        () => bridgeService.IsRunning ? bridgeService.StopAsync() : Task.CompletedTask);
                     if (stopped)
                     {
+                        SetServerStopWarning(null);
                         McpLog.Info("Server stopped");
                     }
                     else
                     {
-                        McpLog.Warn("Failed to stop HTTP server or no server was running");
+                        const string message = "Server was not stopped. Your session was left unchanged. " +
+                            "This Editor may not own the server, another Editor may be using or reloading it, " +
+                            "or safe shutdown could not be verified. Stop it from its launch owner. " +
+                            "If that owner has closed, coordinate all users before manually stopping the identified server.";
+                        SetServerStopWarning(message);
+                        McpLog.Warn(message);
                     }
                 }
                 else
@@ -751,6 +762,22 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 RefreshHttpUi();
                 UpdateConnectionStatus();
             }
+        }
+
+        internal static async Task<bool> StopServerAndSessionAsync(
+            Func<bool> stopServer, Func<Task> stopSession)
+        {
+            if (!stopServer()) return false;
+            await stopSession();
+            return true;
+        }
+
+        private void SetServerStopWarning(string message)
+        {
+            if (httpServerStopWarning == null) return;
+            httpServerStopWarning.text = message ?? string.Empty;
+            httpServerStopWarning.style.display = string.IsNullOrEmpty(message)
+                ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private async Task TryAutoStartSessionAsync()

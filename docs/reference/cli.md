@@ -160,6 +160,20 @@ For example, `unity-mcp editor input key --key Space --duration 0.1`.
 See the [CLI input examples](../../Server/src/cli/CLI_USAGE_GUIDE.md#gameplay-input)
 and [input recovery contract](../development/PLAY_MODE_INPUT.md).
 
+## Independent Editor diagnostics
+
+Matched package/server revisions from `v10.4.0` expose a read-only control-plane
+command, outside normal command admission:
+
+```bash
+unity-mcp --instance MyProject@hash --format json editor diagnostics
+```
+
+It reports real main-thread heartbeat age, bounded native modal candidates and
+reload-retained compile-cycle evidence without refreshing or adding receipts.
+See
+[diagnostic limits and safe recovery](../development/EDITOR_DIAGNOSTICS.md).
+
 ## Administrative receipt recovery
 
 The `receipts` group remains reachable when normal receipt admission is unavailable:

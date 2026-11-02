@@ -40,6 +40,7 @@ class ExternalChangesState:
     changed_paths_truncated: bool = False
     unity_yaml_mtimes_ns: dict[str, int] = field(default_factory=dict)
     unity_yaml_baseline_initialized: bool = False
+    last_scan_complete: bool = False
     acknowledged_editor_save_tokens: list[tuple[str, int]] = field(
         default_factory=list
     )
@@ -140,6 +141,24 @@ class ExternalChangesScanner:
         st.changed_paths_truncated = False
         st.unity_yaml_mtimes_ns.clear()
         st.unity_yaml_baseline_initialized = False
+
+    def capture_refresh_checkpoint(self, instance_id: str) -> tuple | None:
+        """Evidence boundary for a proven full refresh; never hide newer edits."""
+        st = self._get_state(instance_id)
+        if not st.project_root or not st.last_scan_complete:
+            return None
+        return (st.last_seen_mtime_ns, st.last_seen_script_mtime_ns, st.manifest_last_mtime_ns,
+                tuple(sorted(st.unity_yaml_mtimes_ns.items())),
+                json.dumps(st.changed_paths, sort_keys=True))
+
+    def acknowledge_refresh(self, instance_id: str, checkpoint: tuple | None) -> bool:
+        if checkpoint is None:
+            return False
+        self.update_and_get(instance_id, force=True)
+        if checkpoint != self.capture_refresh_checkpoint(instance_id):
+            return False
+        self.clear_dirty(instance_id)
+        return True
 
     def acknowledge_editor_save(
         self,
@@ -487,6 +506,7 @@ class ExternalChangesScanner:
             changed_after_ns=st.last_seen_mtime_ns,
             script_changed_after_ns=st.last_seen_script_mtime_ns,
         )
+        st.last_scan_complete = scan.complete
         newest = scan.newest_mtime_ns
         newest_script = scan.newest_script_mtime_ns
         if (newest is None

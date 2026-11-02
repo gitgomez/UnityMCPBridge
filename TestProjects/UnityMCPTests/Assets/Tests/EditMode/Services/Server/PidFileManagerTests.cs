@@ -38,12 +38,7 @@ namespace MCPForUnityTests.Editor.Services.Server
 
         private void ClearTestEditorPrefs()
         {
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPid); } catch { }
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPort); } catch { }
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerStartedUtc); } catch { }
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPidArgsHash); } catch { }
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPidFilePath); } catch { }
-            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerInstanceToken); } catch { }
+            _manager.ClearTracking();
         }
 
         #region GetPidFilePath Tests
@@ -254,7 +249,7 @@ namespace MCPForUnityTests.Editor.Services.Server
         #region Handshake Tests
 
         [Test]
-        public void StoreHandshake_ValidData_StoresInEditorPrefs()
+        public void StoreHandshake_ValidData_StoresInThisEditorSession()
         {
             // Arrange
             string pidFilePath = "/test/path.pid";
@@ -290,6 +285,39 @@ namespace MCPForUnityTests.Editor.Services.Server
             {
                 _manager.StoreHandshake(null, null);
             });
+        }
+
+        [Test]
+        public void TrackingDoesNotRestoreOwnershipAfterSessionStateWasCleared()
+        {
+            _manager.StoreTracking(12345, 8080);
+            _manager.StoreHandshake("/test/mcp_http_8080.pid", "test-owner");
+            SessionState.EraseString(PidFileManager.ScopedKey(EditorPrefKeys.LastLocalHttpServerPidFilePath));
+            SessionState.EraseString(PidFileManager.ScopedKey(EditorPrefKeys.LastLocalHttpServerInstanceToken));
+            Assert.IsTrue(_manager.TryGetStoredPid(8080, out _));
+            Assert.IsFalse(_manager.TryGetHandshake(out _, out _));
+        }
+
+        [Test]
+        public void GlobalLegacyHandshakeNeverGrantsOwnership()
+        {
+            string pathKey = EditorPrefKeys.LastLocalHttpServerPidFilePath;
+            string tokenKey = EditorPrefKeys.LastLocalHttpServerInstanceToken;
+            bool hadPath = EditorPrefs.HasKey(pathKey), hadToken = EditorPrefs.HasKey(tokenKey);
+            string oldPath = EditorPrefs.GetString(pathKey, ""), oldToken = EditorPrefs.GetString(tokenKey, "");
+            try
+            {
+                EditorPrefs.SetString(pathKey, "/legacy/mcp_http_8080.pid");
+                EditorPrefs.SetString(tokenKey, "foreign-editor");
+                Assert.IsFalse(_manager.TryGetHandshake(out _, out _));
+                _manager.ClearTracking();
+                Assert.AreEqual("foreign-editor", EditorPrefs.GetString(tokenKey));
+            }
+            finally
+            {
+                if (hadPath) EditorPrefs.SetString(pathKey, oldPath); else EditorPrefs.DeleteKey(pathKey);
+                if (hadToken) EditorPrefs.SetString(tokenKey, oldToken); else EditorPrefs.DeleteKey(tokenKey);
+            }
         }
 
         #endregion

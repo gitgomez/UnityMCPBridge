@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Services.Transport;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.Compilation;
@@ -36,6 +37,8 @@ namespace MCPForUnity.Editor.Tools
 
             bool refreshTriggered = false;
             bool compileRequested = false;
+            JObject compileRequest = string.Equals(compile, "request", StringComparison.OrdinalIgnoreCase)
+                ? CompileDiagnostics.BeginRequest(TransportCommandDispatcher.CurrentRequestId) : null;
 
             try
             {
@@ -61,6 +64,8 @@ namespace MCPForUnity.Editor.Tools
                 {
                     CompilationPipeline.RequestScriptCompilation();
                     compileRequested = true;
+                    CompileDiagnostics.MarkRequested(compileRequest.Value<string>("request_id"));
+                    compileRequest["request_returned"] = true;
                 }
 
                 if (string.Equals(scope, "all", StringComparison.OrdinalIgnoreCase) && !refreshTriggered)
@@ -112,6 +117,8 @@ namespace MCPForUnity.Editor.Tools
             {
                 refresh_triggered = refreshTriggered,
                 compile_requested = compileRequested,
+                compile_request = compileRequest,
+                compilation_observation = CompileDiagnostics.Snapshot(),
                 resulting_state = resultingState,
                 hint = shouldWaitForReady
                     ? "Unity refresh completed; editor should be ready."

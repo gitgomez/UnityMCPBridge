@@ -30,4 +30,5 @@ documentation scope.
 - [Documentation workflow](./contributing/docs.md)
 - [Release process](./contributing/releases.md)
 - [Architecture and runtime design](./development/)
+- [Editor diagnostics and safe recovery](./development/EDITOR_DIAGNOSTICS.md)
 - [Migration guides](./migrations/)

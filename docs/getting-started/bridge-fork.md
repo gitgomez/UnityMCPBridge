@@ -15,7 +15,7 @@ This fork is not affiliated with, sponsored by, endorsed by, or supported by Uni
 In Unity, open **Window → Package Manager**, select **Add package from git URL...**, and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.3.0
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.4.0
 ```
 
 The release tag is immutable and is the public installation contract. Do not replace it with `main` if you need a reproducible installation.
@@ -26,10 +26,10 @@ If the repository is private, Git must already have credentials that allow Unity
 
 Installing the Unity package alone is not enough, but the fork package now derives its matching GitHub server source automatically. It never falls back to the published upstream Python package, which does not contain fork-only commands.
 
-Leave **Server Source Override** empty for a stable release. The default source for `v10.3.0` is:
+Leave **Server Source Override** empty for a stable release. The default source for `v10.4.0` is:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.3.0#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.4.0#subdirectory=Server
 ```
 
 For a local development checkout, set **Server Source Override** to:
@@ -83,6 +83,16 @@ Read [runtime UI limits](../development/RUNTIME_UI_EXTENSIONS.md) and
 [input prerequisites and recovery](../development/PLAY_MODE_INPUT.md) before use.
 Input requires Dynamic updates and compatible unpaired actions; it never changes
 project input settings or physical devices.
+
+## Editor diagnostics and shared-server protection
+
+Matched package/server revisions from `v10.4.0` add independent main-thread/native-modal
+diagnostics, reload-retained compile evidence and authenticated shared-use
+guards for managed local server stop/restart. Require the live
+`editor_diagnostics_v1` / `compile_diagnostics_v1`
+capabilities rather than a version-string assumption. No automatic dialog
+answering or heuristic server termination is provided. See
+[the diagnostic contract and safe recovery](../development/EDITOR_DIAGNOSTICS.md).
 
 ## Safe receipt-ledger recovery
 

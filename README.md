@@ -90,9 +90,9 @@ The authoritative built-in surface is
 [fork guide](docs/getting-started/bridge-fork.md) explains the operational
 differences in detail.
 
-## What's new in v10.3.0
+## Runtime UI and gameplay input
 
-This release brings the built-in catalog to **54 MCP tool entrypoints**:
+The built-in catalog contains **54 MCP tool entrypoints**, including:
 
 - **Virtualized UI:** inspect logical ListView/TreeView items without scrolling
   or selecting them; reveal rows explicitly, wait for realization, then operate
@@ -116,8 +116,24 @@ Input System `1.18.0`; that is not a claim of testing every Unity 6 version.
 See [runtime UI details and limits](docs/development/RUNTIME_UI_EXTENSIONS.md),
 [gameplay input and recovery](docs/development/PLAY_MODE_INPUT.md), and the
 [CLI examples](Server/src/cli/CLI_USAGE_GUIDE.md#gameplay-input).
-The known [shared-server batch shutdown issue](unity-mcp-skill/references/capabilities-and-limitations.md#shared-local-server-during-opted-in-batch-editor-shutdown)
-is separate and remains open; use a dedicated server for isolated live tests.
+
+## New in v10.4.0
+
+Independent main-thread and native-modal diagnostics remain reachable when
+normal command admission is full or the Editor main thread is blocked.
+Compile-cycle evidence survives domain reloads, and refresh recovery observes
+the original request without repeating an uncertain mutation. Managed local
+server stop/restart now requires launch ownership and an atomic shared-use
+check, protecting other connected or reloading Editors.
+A refused stop keeps the session connected and explains the refusal in the
+connection window.
+
+This release also updates Authlib, FastMCP/FastMCP-Slim, PyJWT,
+OpenTelemetry-API and certifi. Security minimum versions apply to direct
+Git/uvx installations as well as the checked-in server lockfile.
+
+Use a matched v10.4.0 package/server and discover negotiated capabilities. Read
+[diagnostic limits and safe recovery](docs/development/EDITOR_DIAGNOSTICS.md).
 
 ## Prerequisites
 
@@ -135,13 +151,13 @@ is separate and remains open; use a dedicated server for isolated live tests.
 In Unity, open **Window → Package Manager → Add package from git URL** and use:
 
 ```text
-https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.3.0
+https://github.com/gitgomez/UnityMCPBridge.git?path=/MCPForUnity#v10.4.0
 ```
 
 The package selects the matching server source:
 
 ```text
-git+https://github.com/gitgomez/UnityMCPBridge.git@v10.3.0#subdirectory=Server
+git+https://github.com/gitgomez/UnityMCPBridge.git@v10.4.0#subdirectory=Server
 ```
 
 Do not mix a fork package with the upstream PyPI server. Keep both URLs on the

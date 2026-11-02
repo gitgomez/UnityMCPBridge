@@ -21,6 +21,23 @@ The default cleanup is conservative: it deletes only expired terminal receipts a
 
 ---
 
+## Healthy transport but an unresponsive Editor or uncertain compile
+
+A server health response does not prove the Unity main thread is ticking, the
+Editor is ready or a compile succeeded. Matched revisions from `v10.4.0` provide
+`unity-mcp --format json editor diagnostics` and
+`mcpforunity://editor/diagnostics` outside normal receipt admission. Inspect
+heartbeat age, native modal candidates and the original refresh request's
+compile evidence; do not repeat an uncertain mutation just to check readiness.
+See [diagnostic limits and safe recovery](../development/EDITOR_DIAGNOSTICS.md).
+
+The same release guards managed-server stop/restart against foreign
+Editors, reload gaps and in-flight work. A refusal leaves the server running;
+check its users and launch owner before an operator-managed recovery. Earlier
+package/server pairs must be upgraded together to obtain these protections.
+
+---
+
 ## macOS: Claude CLI fails to start (dyld ICU library not loaded)
 
 **Symptoms:**

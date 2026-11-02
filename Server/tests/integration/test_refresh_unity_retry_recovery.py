@@ -8,10 +8,9 @@ from .test_helpers import DummyContext
 
 
 @pytest.mark.asyncio
-async def test_refresh_unity_recovers_from_retry_disconnect(monkeypatch):
+async def test_refresh_unity_does_not_promote_retry_disconnect_to_success(monkeypatch):
     """
-    Option A: if Unity disconnects and the transport returns hint=retry, refresh_unity(wait_for_ready=true)
-    should poll readiness and then return success + clear external dirty.
+    Readiness cannot prove the result of a lost mutation response.
     """
     from services.tools.refresh_unity import refresh_unity
 
@@ -34,11 +33,11 @@ async def test_refresh_unity_recovers_from_retry_disconnect(monkeypatch):
 
     resp = await refresh_unity(ctx, wait_for_ready=True)
     payload = resp.model_dump() if hasattr(resp, "model_dump") else resp
-    assert payload["success"] is True
-    assert payload.get("data", {}).get("recovered_from_disconnect") is True
+    assert payload["success"] is False
+    assert payload["code"] == "refresh_outcome_unknown"
+    assert payload["data"]["safe_to_retry_refresh"] is False
 
-    # Dirty should be cleared
-    assert external_changes_scanner._states[inst].dirty is False
+    assert external_changes_scanner._states[inst].dirty is True
 
 
 @pytest.mark.asyncio

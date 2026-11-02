@@ -16,6 +16,7 @@ namespace MCPForUnity.Editor.Models
         /// The parameters for the command
         /// </summary>
         public JObject @params { get; set; }
+        // Transport metadata, not a tool parameter. Used for compile/receipt correlation.
+        public string runtime_request_id { get; set; }
     }
 }
-

@@ -763,6 +763,13 @@ eligibility before the first invocation. Results distinguish `validated`, `succe
 
 ## Observability and diagnostics
 
+Independent Editor observations and authenticated managed-server shutdown are
+specified in [Editor diagnostics](EDITOR_DIAGNOSTICS.md). Available from `v10.4.0`, the
+capabilities `editor_diagnostics_v1` and `compile_diagnostics_v1` add a bounded
+read-only control message without changing normal receipt admission or claiming
+that readiness proves compile/request success. Refresh recovery reads the same
+request's evidence rather than issuing a replacement mutation.
+
 The runtime records bounded structured events for:
 
 - request admission and rejection;

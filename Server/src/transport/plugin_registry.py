@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import asyncio
+import time
+import uuid
 
 from core.config import config
 from models.models import ToolDefinitionModel
@@ -49,6 +51,10 @@ class ProjectLifecycle:
     reason: str | None = None
 
 
+class ServerDrainingError(RuntimeError):
+    """Admission is temporarily closed by an authenticated shutdown lease."""
+
+
 class PluginRegistry:
     """Stores active plugin sessions in-memory.
 
@@ -69,6 +75,76 @@ class PluginRegistry:
         self._lock = asyncio.Lock()
         self._changed = asyncio.Condition(self._lock)
         self._lifecycles: dict[tuple[str | None, str], ProjectLifecycle] = {}
+        self._active_commands: dict[str, int] = {}
+        self._shutdown_ticket: str | None = None
+        self._shutdown_until = 0.0
+
+    def _is_draining_unlocked(self) -> bool:
+        if self._shutdown_ticket and time.monotonic() >= self._shutdown_until:
+            self._shutdown_ticket = None
+        return self._shutdown_ticket is not None
+
+    def _shutdown_blockers_unlocked(self, owner: str, *, preflight: bool) -> list[str]:
+        reasons = set()
+        now = datetime.now(timezone.utc)
+        for session in self._sessions.values():
+            if session.project_hash != owner or session.user_id is not None:
+                reasons.add("other_editor_connected")
+        for lifecycle in self._lifecycles.values():
+            if lifecycle.state == "reloading":
+                reasons.add("editor_reloading")
+            elif (lifecycle.project_hash != owner and lifecycle.state == "disconnected"
+                  and (now - lifecycle.updated_at).total_seconds() < 60):
+                reasons.add("recent_editor_disconnect")
+        for session_id, count in self._active_commands.items():
+            session = self._sessions.get(session_id)
+            if count and not (preflight and session and session.project_hash == owner):
+                reasons.add("commands_in_flight")
+        return sorted(reasons)
+
+    async def shutdown_status(self, owner: str) -> dict:
+        async with self._lock:
+            reasons = self._shutdown_blockers_unlocked(owner, preflight=True)
+            if self._is_draining_unlocked():
+                reasons.append("shutdown_in_progress")
+            return {"allowed": not reasons, "reasons": reasons,
+                    "connected_editors": len(self._sessions),
+                    "commands_in_flight": sum(self._active_commands.values())}
+
+    async def prepare_shutdown(self, owner: str) -> dict:
+        """Check users and close registration/command admission in ONE lock."""
+        async with self._changed:
+            reasons = self._shutdown_blockers_unlocked(owner, preflight=False)
+            if self._is_draining_unlocked():
+                reasons.append("shutdown_in_progress")
+            if reasons:
+                return {"allowed": False, "reasons": reasons}
+            self._shutdown_ticket = uuid.uuid4().hex
+            self._shutdown_until = time.monotonic() + 5.0
+            return {"allowed": True, "ticket": self._shutdown_ticket, "lease_ms": 5000}
+
+    async def cancel_shutdown(self, ticket: str) -> bool:
+        async with self._changed:
+            if not self._is_draining_unlocked() or ticket != self._shutdown_ticket:
+                return False
+            self._shutdown_ticket = None
+            self._changed.notify_all()
+            return True
+
+    async def begin_command(self, session_id: str) -> bool:
+        async with self._lock:
+            if self._is_draining_unlocked() or session_id not in self._sessions:
+                return False
+            self._active_commands[session_id] = self._active_commands.get(session_id, 0) + 1
+            return True
+
+    async def end_command(self, session_id: str) -> None:
+        async with self._lock:
+            count = self._active_commands.get(session_id, 0)
+            if count <= 1:
+                self._active_commands.pop(session_id, None)
+            else:
+                self._active_commands[session_id] = count - 1
 
     @staticmethod
     def _lifecycle_key(project_hash: str, user_id: str | None) -> tuple[str | None, str]:
@@ -106,6 +182,8 @@ class PluginRegistry:
             raise ValueError("user_id is required in remote-hosted mode")
 
         async with self._changed:
+            if self._is_draining_unlocked():
+                raise ServerDrainingError("Managed server shutdown is in progress")
             now = datetime.now(timezone.utc)
             session = PluginSession(
                 session_id=session_id,

@@ -66,6 +66,8 @@ namespace MCPForUnity.Editor.Services.Transport
         internal const string StateRevisionsCapability = "state_revisions_v1";
         internal const string BatchSemanticsCapability = "batch_semantics_v1";
         internal const string ReloadLifecycleCapability = "reload_lifecycle_v1";
+        internal const string EditorDiagnosticsCapability = "editor_diagnostics_v1";
+        internal const string CompileDiagnosticsCapability = "compile_diagnostics_v1";
         internal const int MaxCommandMessageBytes = 8 * 1024 * 1024;
         internal const int MaxResponseMessageBytes = 16 * 1024 * 1024;
         internal const int MaxQueuedCommands = 64;
@@ -94,7 +96,9 @@ namespace MCPForUnity.Editor.Services.Transport
                     StableHandlesCapability,
                     StateRevisionsCapability,
                     BatchSemanticsCapability,
-                    ReloadLifecycleCapability),
+                    ReloadLifecycleCapability,
+                    EditorDiagnosticsCapability,
+                    CompileDiagnosticsCapability),
                 ["limits"] = new JObject
                 {
                     ["max_command_message_bytes"] = MaxCommandMessageBytes,

@@ -14,7 +14,7 @@ namespace MCPForUnity.Editor.Services
         /// <summary>
         /// Start the local HTTP server headless (no terminal window), redirecting its output to a
         /// per-port launch log. Reuses an already reachable or in-flight managed server; otherwise
-        /// stops stale server state on the port and clears stale artifacts first.
+        /// refuses an occupied endpoint without stopping an unverified server.
         /// </summary>
         /// <param name="quiet">When true, skip confirmation dialogs (used by auto-start).</param>
         /// <returns>True if server was started successfully, false otherwise</returns>
@@ -51,13 +51,13 @@ namespace MCPForUnity.Editor.Services
         void LogLocalHttpServerLaunchFailure();
 
         /// <summary>
-        /// Stop the local HTTP server by finding the process listening on the configured port
+        /// Stop only this Editor process's managed server after authenticated, atomic admission.
         /// </summary>
         bool StopLocalHttpServer();
 
         /// <summary>
-        /// Stop the Unity-managed local HTTP server if a handshake/pidfile exists,
-        /// even if the current transport selection has changed.
+        /// Stop this process's launch-owned server only when no other Editor is using/reloading it.
+        /// Missing ownership, legacy peers, or uncertain state leave it running.
         /// </summary>
         bool StopManagedLocalHttpServer();
 

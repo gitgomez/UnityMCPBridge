@@ -7,14 +7,14 @@ from .test_helpers import DummyContext
 
 
 @pytest.mark.asyncio
-async def test_returns_immediately_in_pytest(monkeypatch):
-    """_in_pytest() detects PYTEST_CURRENT_TEST and returns (True, 0.0) immediately."""
+async def test_pytest_does_not_supply_implicit_readiness(monkeypatch):
+    """A test environment alone is not positive Editor readiness evidence."""
     # PYTEST_CURRENT_TEST is set by pytest automatically, so this should short-circuit.
     from services.tools.refresh_unity import wait_for_editor_ready
 
     ctx = DummyContext()
     ready, elapsed = await wait_for_editor_ready(ctx, timeout_s=5.0)
-    assert ready is True
+    assert ready is False
     assert elapsed == 0.0
 
 
@@ -62,8 +62,8 @@ async def test_timeout_returns_false(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stale_only_treated_as_ready(monkeypatch):
-    """If the only blocking reason is stale_status, consider ready."""
+async def test_stale_only_does_not_override_explicit_not_ready(monkeypatch):
+    """A stale observation must not turn explicit not-ready into success."""
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
 
     from services.tools import refresh_unity as mod
@@ -74,8 +74,9 @@ async def test_stale_only_treated_as_ready(monkeypatch):
     monkeypatch.setattr(mod.editor_state, "get_editor_state", fake_get_editor_state)
 
     ctx = DummyContext()
-    ready, elapsed = await mod.wait_for_editor_ready(ctx, timeout_s=5.0)
-    assert ready is True
+    ready, elapsed = await mod.wait_for_editor_ready(ctx, timeout_s=0.05)
+    assert ready is False
+    assert elapsed >= 0.05
 
 
 @pytest.mark.asyncio

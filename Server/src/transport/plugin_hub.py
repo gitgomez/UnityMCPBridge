@@ -18,7 +18,7 @@ from starlette.websockets import WebSocket, WebSocketState
 from core.config import config
 from core.constants import API_KEY_HEADER
 from models.models import MCPResponse
-from transport.plugin_registry import PluginRegistry
+from transport.plugin_registry import PluginRegistry, ServerDrainingError
 from transport.mutation_policy import (
     authorize_mutation,
     get_server_mutation_profile,
@@ -26,6 +26,8 @@ from transport.mutation_policy import (
 from transport.runtime_protocol import (
     BOUNDED_COMMAND_QUEUE_CAPABILITY,
     CONTROL_PATH_CAPABILITY,
+    EDITOR_DIAGNOSTICS_CAPABILITY,
+    COMPILE_DIAGNOSTICS_CAPABILITY,
     MAX_COMMAND_MESSAGE_BYTES,
     MAX_QUEUED_COMMANDS,
     MAX_QUEUED_PAYLOAD_BYTES,
@@ -54,6 +56,7 @@ from transport.models import (
     ReceiptStatusResultMessage,
     CancelRequestResultMessage,
     ReceiptLedgerResultMessage,
+    EditorDiagnosticsResultMessage,
     SessionList,
     SessionDetails,
 )
@@ -281,8 +284,12 @@ class PluginHub(WebSocketEndpoint):
                 await self._handle_control_result(
                     ReceiptLedgerResultMessage(**data).model_dump()
                 )
+            elif message_type == "editor_diagnostics_result":
+                await self._handle_control_result(EditorDiagnosticsResultMessage(**data).model_dump())
             else:
                 logger.debug(f"Ignoring plugin message: {data}")
+        except ServerDrainingError:
+            await websocket.close(code=1013, reason="Managed server shutdown in progress")
         except Exception as e:
             logger.error(f"Error handling message type {message_type}: {e}")
 
@@ -337,6 +344,27 @@ class PluginHub(WebSocketEndpoint):
         *,
         request_id: str | None = None,
         attempt: int = 1,
+    ) -> dict[str, Any]:
+        registry = cls._registry
+        if not cls.is_configured():
+            raise RuntimeError("PluginHub not configured")
+        if not await registry.begin_command(session_id):
+            return cls._runtime_admission_error(
+                code="SERVER_DRAINING",
+                message="Command admission is closed or the Unity session has disconnected.",
+                data={"retry_after_ms": 500},
+            )
+        try:
+            return await cls._send_admitted_command(
+                session_id, command_type, params, request_id=request_id, attempt=attempt
+            )
+        finally:
+            await registry.end_command(session_id)
+
+    @classmethod
+    async def _send_admitted_command(
+        cls, session_id: str, command_type: str, params: dict[str, Any], *,
+        request_id: str | None = None, attempt: int = 1,
     ) -> dict[str, Any]:
         websocket = await cls._get_connection(session_id)
         command_id = str(uuid.uuid4())
@@ -619,6 +647,16 @@ class PluginHub(WebSocketEndpoint):
         )
 
     @classmethod
+    async def query_editor_diagnostics(cls, session_id: str) -> dict[str, Any]:
+        response = await cls._send_runtime_control(
+            session_id, {"type": "editor_diagnostics"},
+            required_capabilities={CONTROL_PATH_CAPABILITY, EDITOR_DIAGNOSTICS_CAPABILITY,
+                                   COMPILE_DIAGNOSTICS_CAPABILITY},
+        )
+        result = response.get("result") if isinstance(response, dict) else None
+        return result if isinstance(result, dict) else response
+
+    @classmethod
     async def manage_receipt_ledger(
         cls,
         session_id: str,
@@ -815,10 +853,6 @@ class PluginHub(WebSocketEndpoint):
         user_id = getattr(websocket.state, "user_id", None)
 
         session_id = str(uuid.uuid4())
-        # Inform the plugin of its assigned session ID
-        response = RegisteredMessage(session_id=session_id)
-        await websocket.send_json(response.model_dump())
-
         session, evicted_session_id = await registry.register(
             session_id,
             project_name,
@@ -829,6 +863,8 @@ class PluginHub(WebSocketEndpoint):
             runtime=remote_runtime,
             runtime_negotiation=runtime_negotiation,
         )
+        response = RegisteredMessage(session_id=session_id)
+        await websocket.send_json(response.model_dump())
         evicted_ws = None
         async with lock:
             # Clean up the evicted session's connection, ping loop, and pending commands

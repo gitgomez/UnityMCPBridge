@@ -281,10 +281,7 @@ namespace MCPForUnity.Editor.Services
                 return false;
             }
 
-            // First, try to stop any existing server (quietly; we'll only warn if the port remains occupied).
-            StopLocalHttpServerInternal(quiet: true);
-
-            // If the port is still occupied, don't start and explain why (avoid confusing "refusing to stop" warnings).
+            // Discovery never grants stop authority. Refuse an occupied endpoint, do not kill it.
             try
             {
                 string httpUrl = HttpEndpointUtility.GetLocalBaseUrl();
@@ -373,6 +370,8 @@ namespace MCPForUnity.Editor.Services
                 // Launch the server headless (no terminal window); stdout+stderr go to the launch log.
                 string effectiveLog = launchLog ?? Path.Combine(Path.GetTempPath(), "mcp-for-unity-server-launch.log");
                 var startInfo = CreateHeadlessProcessStartInfo(launchCommand, effectiveLog);
+                startInfo.EnvironmentVariables["UNITY_MCP_OWNER_PROJECT_HASH"] =
+                    ProjectIdentityUtility.GetProjectHash();
 
                 // The headless shell is not a login shell, so it does not inherit the user's
                 // profile PATH (on macOS, GUI-launched Unity has a minimal PATH). Prepend the
@@ -418,29 +417,7 @@ namespace MCPForUnity.Editor.Services
 
         public bool StopManagedLocalHttpServer()
         {
-            if (!TryGetLocalHttpServerHandshake(out var pidFilePath, out _))
-            {
-                return false;
-            }
-
-            int port = 0;
-            if (!TryGetPortFromPidFilePath(pidFilePath, out port) || port <= 0)
-            {
-                string baseUrl = HttpEndpointUtility.GetLocalBaseUrl();
-                if (IsLocalUrl(baseUrl)
-                    && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
-                    && uri.Port > 0)
-                {
-                    port = uri.Port;
-                }
-            }
-
-            if (port <= 0)
-            {
-                return false;
-            }
-
-            return StopLocalHttpServerInternal(quiet: true, portOverride: port, allowNonLocalUrl: true);
+            return StopLocalHttpServerInternal(quiet: true);
         }
 
         public bool IsLocalHttpServerRunning()
@@ -621,299 +598,105 @@ namespace MCPForUnity.Editor.Services
             hosts.Add(candidate);
         }
 
-        private bool StopLocalHttpServerInternal(bool quiet, int? portOverride = null, bool allowNonLocalUrl = false)
+        // No port, command-line or global EditorPrefs heuristic grants stop authority.
+        // The launch owner's SessionState token authenticates an atomic server-side lease.
+        internal bool CanStopManagedLocalHttpServer()
         {
-            string httpUrl = HttpEndpointUtility.GetLocalBaseUrl();
-            if (!allowNonLocalUrl && !IsLocalUrl(httpUrl))
-            {
-                if (!quiet)
-                {
-                    McpLog.Warn("Cannot stop server: URL is not local.");
-                }
-                return false;
-            }
+            return TryManagedControl("status", out var reply, out _, out _, out _) &&
+                reply.Value<bool?>("allowed") == true;
+        }
 
+        private bool TryManagedControl(string action, out Newtonsoft.Json.Linq.JObject reply,
+            out int pid, out int port, out string token, string ticket = null)
+        {
+            reply = null;
+            pid = port = 0;
+            token = null;
+            if (!TryGetLocalHttpServerHandshake(out var path, out token) ||
+                !TryGetPortFromPidFilePath(path, out port) ||
+                !_pidFileManager.TryReadPid(path, out pid) ||
+                pid <= 1 || pid == _processDetector.GetCurrentProcessId() || port > 65535)
+                return false;
             try
             {
-                int port = 0;
-                if (portOverride.HasValue)
+                int expectedPid = pid;
+                int ownedPort = port;
+                string ownerToken = token;
+                reply = System.Threading.Tasks.Task.Run(async () =>
                 {
-                    port = portOverride.Value;
-                }
-                else
-                {
-                    var uri = new Uri(httpUrl);
-                    port = uri.Port;
-                }
-
-                if (port <= 0)
-                {
-                    if (!quiet)
+                    using var handler = new System.Net.Http.HttpClientHandler
+                    { UseProxy = false, AllowAutoRedirect = false };
+                    using var client = new System.Net.Http.HttpClient(handler)
+                    { Timeout = TimeSpan.FromSeconds(1), MaxResponseContentBufferSize = 16384 };
+                    client.DefaultRequestHeaders.Add("X-Unity-MCP-Instance-Token", ownerToken);
+                    var body = new Newtonsoft.Json.Linq.JObject
+                    { ["action"] = action, ["expected_pid"] = expectedPid, ["ticket"] = ticket };
+                    // Literal loopback only: never forward launch secrets to configured URLs.
+                    foreach (string host in new[] { "127.0.0.1", "[::1]" })
                     {
-                        McpLog.Warn("Cannot stop server: Invalid port.");
-                    }
-                    return false;
-                }
-
-                // Guardrails:
-                // - Never terminate the Unity Editor process.
-                // - Only terminate processes that look like the MCP server (uv/uvx/python running mcp-for-unity).
-                // This prevents accidental termination of unrelated services (including Unity itself).
-                int unityPid = GetCurrentProcessIdSafe();
-                bool stoppedAny = false;
-
-                // Preferred deterministic stop path: if we have a pidfile+token from a Unity-managed launch,
-                // validate and terminate exactly that PID.
-                if (TryGetLocalHttpServerHandshake(out var pidFilePath, out var instanceToken))
-                {
-                    // Prefer deterministic stop when Unity started the server (pidfile+token).
-                    // If the pidfile isn't available yet (fast quit after start), we can optionally fall back
-                    // to port-based heuristics when a port override was supplied (managed-stop path).
-                    if (!TryReadPidFromPidFile(pidFilePath, out var pidFromFile) || pidFromFile <= 0)
-                    {
-                        if (!portOverride.HasValue)
+                        try
                         {
-                            if (!quiet)
-                            {
-                                McpLog.Warn(
-                                    $"Cannot stop local HTTP server on port {port}: pidfile not available yet at '{pidFilePath}'. " +
-                                    "If you just started the server, wait a moment and try again.");
-                            }
-                            return false;
+                            using var content = new System.Net.Http.StringContent(body.ToString(),
+                                System.Text.Encoding.UTF8, "application/json");
+                            using var response = await client.PostAsync(
+                                $"http://{host}:{ownedPort}/api/server-control", content).ConfigureAwait(false);
+                            if (!response.IsSuccessStatusCode) continue;
+                            string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            var result = Newtonsoft.Json.Linq.JObject.Parse(text);
+                            if (result.Value<bool?>("success") == true &&
+                                result.Value<int?>("pid") == expectedPid &&
+                                result.Value<string>("capability") == "managed_shutdown_v1" &&
+                                !string.IsNullOrEmpty(result.Value<string>("boot_id")))
+                                return result;
                         }
-
-                        // Managed-stop fallback: proceed with port-based heuristics below.
-                        // We intentionally do NOT clear handshake state here; it will be cleared if we successfully
-                        // stop a server process and/or the port is freed.
+                        catch { /* Refuse, never fall back to a heuristic kill. */ }
                     }
-                    else
-                    {
-                        // Never kill Unity/Hub.
-                        if (unityPid > 0 && pidFromFile == unityPid)
-                        {
-                            if (!quiet)
-                            {
-                                McpLog.Warn($"Refusing to stop port {port}: pidfile PID {pidFromFile} is the Unity Editor process.");
-                            }
-                        }
-                        else
-                        {
-                            var listeners = GetListeningProcessIdsForPort(port);
-                            if (listeners.Count == 0)
-                            {
-                                // Nothing is listening anymore; clear stale handshake state.
-                                try { DeletePidFile(pidFilePath); } catch { }
-                                ClearLocalServerPidTracking();
-                                if (!quiet)
-                                {
-                                    McpLog.Info($"No process found listening on port {port}");
-                                }
-                                return false;
-                            }
-                            bool pidIsListener = listeners.Contains(pidFromFile);
-                            bool tokenQueryOk = TryProcessCommandLineContainsInstanceToken(pidFromFile, instanceToken, out bool tokenMatches);
-                            bool allowKill;
-                            if (tokenQueryOk)
-                            {
-                                allowKill = tokenMatches;
-                            }
-                            else
-                            {
-                                // If token validation is unavailable (e.g. Windows CIM permission issues),
-                                // fall back to a stricter heuristic: only allow stop if the PID still looks like our server.
-                                allowKill = LooksLikeMcpServerProcess(pidFromFile);
-                            }
-
-                            if (pidIsListener && allowKill)
-                            {
-                                if (TerminateProcess(pidFromFile))
-                                {
-                                    stoppedAny = true;
-                                    try { DeletePidFile(pidFilePath); } catch { }
-                                    ClearLocalServerPidTracking();
-                                    if (!quiet)
-                                    {
-                                        McpLog.Info($"Stopped local HTTP server on port {port} (PID: {pidFromFile})");
-                                    }
-                                    return true;
-                                }
-                                if (!quiet)
-                                {
-                                    McpLog.Warn($"Failed to terminate local HTTP server on port {port} (PID: {pidFromFile}).");
-                                }
-                                return false;
-                            }
-
-                            // If the pidfile PID is no longer the active listener, treat handshake state as stale
-                            // and continue with guarded port-based heuristics below.
-                            if (!pidIsListener)
-                            {
-                                if (!quiet)
-                                {
-                                    McpLog.Warn(
-                                        $"Stale pidfile for port {port}: pidfile PID {pidFromFile} is not the current listener " +
-                                        $"(tokenMatch={tokenMatches}, tokenQueryOk={tokenQueryOk}). Falling back to guarded port heuristics.");
-                                }
-                                try { DeletePidFile(pidFilePath); } catch { }
-                                ClearLocalServerPidTracking();
-                            }
-                            else
-                            {
-                                // PID still owns the listener, but identity validation failed.
-                                // Fail closed to avoid terminating unrelated processes.
-                                if (!quiet)
-                                {
-                                    McpLog.Warn(
-                                        $"Refusing to stop port {port}: pidfile PID {pidFromFile} failed validation " +
-                                        $"(listener={pidIsListener}, tokenMatch={tokenMatches}, tokenQueryOk={tokenQueryOk}).");
-                                }
-                                return false;
-                            }
-                        }
-                    }
-                }
-
-                var pids = GetListeningProcessIdsForPort(port);
-                if (pids.Count == 0)
-                {
-                    if (stoppedAny)
-                    {
-                        // We stopped what Unity started; the port is now free.
-                        if (!quiet)
-                        {
-                            McpLog.Info($"Stopped local HTTP server on port {port}");
-                        }
-                        ClearLocalServerPidTracking();
-                        return true;
-                    }
-
-                    if (!quiet)
-                    {
-                        McpLog.Info($"No process found listening on port {port}");
-                    }
-                    ClearLocalServerPidTracking();
-                    return false;
-                }
-
-                // Prefer killing the PID that we previously observed binding this port (if still valid).
-                if (TryGetStoredLocalServerPid(port, out int storedPid))
-                {
-                    if (pids.Contains(storedPid))
-                    {
-                        string expectedHash = string.Empty;
-                        expectedHash = GetStoredArgsHash();
-
-                        // Prefer a fingerprint match (reduces PID reuse risk). If missing (older installs),
-                        // fall back to a looser check to avoid leaving orphaned servers after domain reload.
-                        if (TryGetUnixProcessArgs(storedPid, out var storedArgsLowerNow))
-                        {
-                            // Never kill Unity/Hub.
-                            // Note: "mcp-for-unity" includes "unity", so detect MCP indicators first.
-                            bool storedMentionsMcp = storedArgsLowerNow.Contains("mcp-for-unity")
-                                                     || storedArgsLowerNow.Contains("mcp_for_unity")
-                                                     || storedArgsLowerNow.Contains("mcpforunity");
-                            if (storedArgsLowerNow.Contains("unityhub")
-                                || storedArgsLowerNow.Contains("unity hub")
-                                || (storedArgsLowerNow.Contains("unity") && !storedMentionsMcp))
-                            {
-                                if (!quiet)
-                                {
-                                    McpLog.Warn($"Refusing to stop port {port}: stored PID {storedPid} appears to be a Unity process.");
-                                }
-                            }
-                            else
-                            {
-                                bool allowKill = false;
-                                if (!string.IsNullOrEmpty(expectedHash))
-                                {
-                                    allowKill = string.Equals(expectedHash, ComputeShortHash(storedArgsLowerNow), StringComparison.OrdinalIgnoreCase);
-                                }
-                                else
-                                {
-                                    // Older versions didn't store a fingerprint; accept common server indicators.
-                                    allowKill = storedArgsLowerNow.Contains("uvicorn")
-                                                || storedArgsLowerNow.Contains("fastmcp")
-                                                || storedArgsLowerNow.Contains("mcpforunity")
-                                                || storedArgsLowerNow.Contains("mcp-for-unity")
-                                                || storedArgsLowerNow.Contains("mcp_for_unity")
-                                                || storedArgsLowerNow.Contains("uvx")
-                                                || storedArgsLowerNow.Contains("python");
-                                }
-
-                                if (allowKill && TerminateProcess(storedPid))
-                                {
-                                    if (!quiet)
-                                    {
-                                        McpLog.Info($"Stopped local HTTP server on port {port} (PID: {storedPid})");
-                                    }
-                                    stoppedAny = true;
-                                    ClearLocalServerPidTracking();
-                                    // Refresh the PID list to avoid double-work.
-                                    pids = GetListeningProcessIdsForPort(port);
-                                }
-                                else if (!allowKill && !quiet)
-                                {
-                                    McpLog.Warn($"Refusing to stop port {port}: stored PID {storedPid} did not match expected server fingerprint.");
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Stale PID (no longer listening). Clear.
-                        ClearLocalServerPidTracking();
-                    }
-                }
-
-                foreach (var pid in pids)
-                {
-                    if (pid <= 0) continue;
-                    if (unityPid > 0 && pid == unityPid)
-                    {
-                        if (!quiet)
-                        {
-                            McpLog.Warn($"Refusing to stop port {port}: owning PID appears to be the Unity Editor process (PID {pid}).");
-                        }
-                        continue;
-                    }
-
-                    if (!LooksLikeMcpServerProcess(pid))
-                    {
-                        if (!quiet)
-                        {
-                            McpLog.Warn($"Refusing to stop port {port}: owning PID {pid} does not look like mcp-for-unity.");
-                        }
-                        continue;
-                    }
-
-                    if (TerminateProcess(pid))
-                    {
-                        McpLog.Info($"Stopped local HTTP server on port {port} (PID: {pid})");
-                        stoppedAny = true;
-                    }
-                    else
-                    {
-                        if (!quiet)
-                        {
-                            McpLog.Warn($"Failed to stop process PID {pid} on port {port}");
-                        }
-                    }
-                }
-
-                if (stoppedAny)
-                {
-                    ClearLocalServerPidTracking();
-                }
-                return stoppedAny;
+                    return null;
+                }).GetAwaiter().GetResult();
+                return reply != null;
             }
-            catch (Exception ex)
+            catch { return false; }
+        }
+
+        internal Func<int, bool> GuardedTerminationProvider = pid =>
+        {
+            try
             {
-                if (!quiet)
-                {
-                    McpLog.Error($"Failed to stop server: {ex.Message}");
-                }
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                // Exactly this authenticated server, never a process tree or shell pattern.
+                process.Kill();
+                return process.WaitForExit(1000);
+            }
+            catch { return false; }
+        };
+
+        private bool StopLocalHttpServerInternal(bool quiet)
+        {
+            var budget = System.Diagnostics.Stopwatch.StartNew();
+            if (!TryManagedControl("prepare", out var reply, out int pid, out _, out _)
+                || reply.Value<bool?>("allowed") != true)
+            {
+                if (!quiet) McpLog.Warn("Server left running: this Editor is not its launch owner, " +
+                    "another Editor is using/reloading it, or stop authority could not be verified.");
                 return false;
             }
+            string ticket = reply.Value<string>("ticket");
+            if (string.IsNullOrEmpty(ticket) || reply.Value<int?>("lease_ms") != 5000 ||
+                budget.ElapsedMilliseconds >= 3000)
+            {
+                TryManagedControl("cancel", out _, out _, out _, out _, ticket);
+                return false;
+            }
+            bool stopped = GuardedTerminationProvider(pid);
+            if (!stopped)
+            {
+                TryManagedControl("cancel", out _, out _, out _, out _, ticket);
+                return false;
+            }
+            if (TryGetLocalHttpServerHandshake(out var path, out _))
+                _pidFileManager.DeletePidFile(path);
+            ClearLocalServerPidTracking();
+            return true;
         }
 
         private bool TryGetUnixProcessArgs(int pid, out string argsLower)
@@ -1201,7 +984,7 @@ namespace MCPForUnity.Editor.Services
 
         internal static Func<DateTime> UtcNowProvider = () => DateTime.UtcNow;
         internal static Func<bool> CanScheduleProvider = () =>
-            MCPServiceLocator.Server.IsLocalHttpServerRunning();
+            (MCPServiceLocator.Server as ServerManagementService)?.CanStopManagedLocalHttpServer() == true;
         internal static Func<bool> StopProvider = () =>
             MCPServiceLocator.Server.StopManagedLocalHttpServer();
         internal static Func<bool> IsReachableProvider = () =>
@@ -1242,7 +1025,9 @@ namespace MCPForUnity.Editor.Services
 
                 if (!canSchedule)
                 {
-                    return "A running Unity-managed local MCP server is required for a planned restart.";
+                    return "Planned restart refused: launch ownership or safe exclusive use of the " +
+                        "Unity-managed local MCP server could not be confirmed. Leave the server running " +
+                        "and check other Editors, reloads and in-flight work.";
                 }
 
                 DateTime now = UtcNowProvider();
@@ -1439,7 +1224,8 @@ namespace MCPForUnity.Editor.Services
                 _portReleaseDeadlineUtc = DateTime.MinValue;
                 _replacementDeadlineUtc = DateTime.MinValue;
                 UtcNowProvider = () => DateTime.UtcNow;
-                CanScheduleProvider = () => MCPServiceLocator.Server.IsLocalHttpServerRunning();
+                CanScheduleProvider = () =>
+                    (MCPServiceLocator.Server as ServerManagementService)?.CanStopManagedLocalHttpServer() == true;
                 StopProvider = () => MCPServiceLocator.Server.StopManagedLocalHttpServer();
                 IsReachableProvider = () => MCPServiceLocator.Server.IsLocalHttpServerReachable();
                 PreviousLaunchProcessAliveProvider = () => MCPServiceLocator.Server.IsManagedServerLaunchProcessAlive();

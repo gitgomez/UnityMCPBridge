@@ -30,6 +30,8 @@ STABLE_HANDLES_CAPABILITY = "stable_handles_v1"
 STATE_REVISIONS_CAPABILITY = "state_revisions_v1"
 BATCH_SEMANTICS_CAPABILITY = "batch_semantics_v1"
 RELOAD_LIFECYCLE_CAPABILITY = "reload_lifecycle_v1"
+EDITOR_DIAGNOSTICS_CAPABILITY = "editor_diagnostics_v1"
+COMPILE_DIAGNOSTICS_CAPABILITY = "compile_diagnostics_v1"
 MAX_COMMAND_MESSAGE_BYTES = 8 * 1024 * 1024
 MAX_RESPONSE_MESSAGE_BYTES = 16 * 1024 * 1024
 MAX_QUEUED_COMMANDS = 64
@@ -108,6 +110,8 @@ def build_server_advertisement() -> RuntimeAdvertisement:
             STATE_REVISIONS_CAPABILITY,
             BATCH_SEMANTICS_CAPABILITY,
             RELOAD_LIFECYCLE_CAPABILITY,
+            EDITOR_DIAGNOSTICS_CAPABILITY,
+            COMPILE_DIAGNOSTICS_CAPABILITY,
         ],
         limits={
             "max_command_message_bytes": MAX_COMMAND_MESSAGE_BYTES,

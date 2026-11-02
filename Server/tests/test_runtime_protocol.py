@@ -27,6 +27,8 @@ from transport.runtime_protocol import (
     RECEIPT_LEDGER_ADMIN_CAPABILITY,
     REQUEST_RECEIPTS_CAPABILITY,
     RELOAD_LIFECYCLE_CAPABILITY,
+    EDITOR_DIAGNOSTICS_CAPABILITY,
+    COMPILE_DIAGNOSTICS_CAPABILITY,
     RESPONSE_ENVELOPE_CAPABILITY,
     STABLE_HANDLES_CAPABILITY,
     STATE_REVISIONS_CAPABILITY,
@@ -60,6 +62,8 @@ def test_server_advertises_implemented_runtime_capabilities_and_limits():
         STATE_REVISIONS_CAPABILITY,
         BATCH_SEMANTICS_CAPABILITY,
         RELOAD_LIFECYCLE_CAPABILITY,
+        EDITOR_DIAGNOSTICS_CAPABILITY,
+        COMPILE_DIAGNOSTICS_CAPABILITY,
     ]
     assert advertisement.contract_version == 1
     assert advertisement.built_in_schema_hash.startswith("sha256:")
@@ -182,6 +186,8 @@ async def test_websocket_welcome_advertises_runtime(monkeypatch):
         STATE_REVISIONS_CAPABILITY,
         BATCH_SEMANTICS_CAPABILITY,
         RELOAD_LIFECYCLE_CAPABILITY,
+        EDITOR_DIAGNOSTICS_CAPABILITY,
+        COMPILE_DIAGNOSTICS_CAPABILITY,
     ]
     assert "package_version" not in payload["runtime"]
 

@@ -170,6 +170,12 @@ async def test_legacy_session_does_not_enable_profile_enforcement(
 ):
     registry = PluginRegistry()
     PluginHub.configure(registry, asyncio.get_running_loop())
+    await registry.register(
+        session_id="legacy-mutation",
+        project_name="LegacyMutationProject",
+        project_hash="legacy-mutation-hash",
+        unity_version="6000.3.9f1",
+    )
     websocket = AsyncMock()
     PluginHub._connections["legacy-mutation"] = websocket
     monkeypatch.setenv(MUTATION_PROFILE_ENV, "read_only")

@@ -27,6 +27,15 @@ from cli.utils.connection import (
 )
 
 
+def test_editor_diagnostics_uses_administrative_path_not_normal_command():
+    with patch("cli.utils.connection.run_editor_diagnostics", return_value={"success": True, "data": {}}) as read:
+        with patch("cli.commands.editor.run_command") as send:
+            result = CliRunner().invoke(cli, ["editor", "diagnostics"])
+    assert result.exit_code == 0, result.output
+    read.assert_called_once()
+    send.assert_not_called()
+
+
 # =============================================================================
 # Fixtures
 # =============================================================================

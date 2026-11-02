@@ -88,6 +88,12 @@ class ReceiptLedgerResultMessage(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
+class EditorDiagnosticsResultMessage(BaseModel):
+    type: str = "editor_diagnostics_result"
+    id: str
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
 # Session Info (API response)
 
 

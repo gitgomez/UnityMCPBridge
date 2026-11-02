@@ -31,6 +31,13 @@ Currently active editor tool (Move, Rotate, Scale, etc.) and transform handle se
 URI: mcpforunity://editor/active-tool
 
 
+## `editor_diagnostics`
+
+**URI:** `mcpforunity://editor/diagnostics`
+
+Read-only control-plane main-thread, native modal and compile-cycle evidence; no receipts or refresh.
+
+
 ## `editor_prefab_stage`
 
 **URI:** `mcpforunity://editor/prefab-stage`

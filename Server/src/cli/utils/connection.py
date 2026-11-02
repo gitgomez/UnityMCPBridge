@@ -187,6 +187,21 @@ async def send_receipt_ledger_admin(
         raise UnityConnectionError(f"Unexpected error: {e}")
 
 
+def run_editor_diagnostics(config: Optional[CLIConfig] = None) -> Dict[str, Any]:
+    """Independent local diagnostics; never dispatches a normal Unity command."""
+    cfg = config or get_config()
+    async def read():
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"http://{cfg.host}:{cfg.port}/api/editor-diagnostics",
+                    json={"unity_instance": cfg.unity_instance}, timeout=cfg.timeout)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPError as exc:
+            raise UnityConnectionError(f"Editor diagnostics unavailable: {exc}") from exc
+    return asyncio.run(read())
+
+
 def run_receipt_ledger_admin(
     *,
     action: str,

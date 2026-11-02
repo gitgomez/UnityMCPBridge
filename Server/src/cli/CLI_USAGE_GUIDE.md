@@ -359,6 +359,16 @@ unity-mcp receipts cleanup --all-terminal --confirm-outcome-unknown
 
 For implementation invariants, see `docs/development/COMMAND_RUNTIME_V1.md`.
 
+## Independent Editor Diagnostics
+
+Matched revisions from `v10.4.0` add `unity-mcp --format json editor diagnostics`.
+This read-only command uses a separate control path, not normal command
+admission, and does not refresh, compile or create receipts. It separates
+main-thread liveness, native modal candidates, compile evidence and readiness.
+Follow the
+[diagnostic and recovery contract](../../../docs/development/EDITOR_DIAGNOSTICS.md)
+when a request is uncertain or an Editor/server appears blocked.
+
 ## Runtime UI Interaction
 
 The development collection and RenderTexture extensions are documented in the

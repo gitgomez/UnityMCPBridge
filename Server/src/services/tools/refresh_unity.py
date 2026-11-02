@@ -15,7 +15,6 @@ from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
 import transport.unity_transport as unity_transport
 import transport.legacy.unity_connection as _legacy_conn
-from transport.legacy.unity_connection import _extract_response_reason
 from services.state.external_changes_scanner import external_changes_scanner
 from services.state.external_asset_guard import guard_external_yaml_refresh
 import services.resources.editor_state as editor_state
@@ -94,14 +93,15 @@ async def _wait_for_editor_ready_state(
     caller can report the observation that actually fulfilled the wait.
     """
     if _in_pytest():
-        return (True, 0.0, None)
+        return (False, 0.0, None)  # Tests must provide positive readiness evidence explicitly.
 
     start = time.monotonic()
     saw_blocking_state = False
     last_state: dict[str, Any] | None = None
     while time.monotonic() - start < timeout_s:
         try:
-            state_resp = await editor_state.get_editor_state(ctx)
+            state_resp = await asyncio.wait_for(editor_state.get_editor_state(ctx),
+                timeout=max(0.001, timeout_s - (time.monotonic() - start)))
             state = state_resp.model_dump() if hasattr(state_resp, "model_dump") else state_resp
             data = (state or {}).get("data") if isinstance(state, dict) else None
             if isinstance(data, dict):
@@ -128,15 +128,12 @@ async def _wait_for_editor_ready_state(
                         and _compilation_cycle_advanced(data, after_state)
                     )
                 )
-                ready = (
-                    advice.get("ready_for_tools") is True
-                    or not (blocking & _REAL_BLOCKING_REASONS)
-                )
+                ready = advice.get("ready_for_tools") is True
                 if ready and state_advanced and compilation_advanced:
                     return (True, time.monotonic() - start, data)
         except Exception:
             pass  # not ready yet — keep polling
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(min(0.25, max(0, timeout_s - (time.monotonic() - start))))
 
     return (False, time.monotonic() - start, last_state)
 
@@ -294,12 +291,19 @@ async def refresh_unity(
     wait_for_ready: Annotated[bool,
                               "If true, wait until editor_state.advice.ready_for_tools is true"] = True,
 ) -> MCPResponse | dict[str, Any]:
+    deadline = time.monotonic() + 60.0
     unity_instance = await get_unity_instance_from_context(ctx)
+    instance_id = unity_instance
 
     pre_refresh_state: dict[str, Any] | None = None
     if not _in_pytest():
         try:
-            state_response = await editor_state.get_editor_state(ctx)
+            from services.resources.editor_diagnostics import get_editor_diagnostics
+            diagnostic = await asyncio.wait_for(get_editor_diagnostics(ctx), max(0.001, deadline - time.monotonic()))
+            if diagnostic.success:
+                state_response = MCPResponse(success=True, data=(diagnostic.data or {}).get("editor_state"))
+            else:
+                state_response = await asyncio.wait_for(editor_state.get_editor_state(ctx), max(0.001, deadline - time.monotonic()))
             state_payload = (
                 state_response.model_dump()
                 if hasattr(state_response, "model_dump")
@@ -330,7 +334,8 @@ async def refresh_unity(
                     instance_id = candidate_id
         if not instance_id:
             try:
-                instance_id = await editor_state.infer_single_instance_id(ctx)
+                instance_id = await asyncio.wait_for(editor_state.infer_single_instance_id(ctx),
+                    timeout=max(0.001, deadline - time.monotonic()))
             except Exception:
                 instance_id = None
 
@@ -346,12 +351,12 @@ async def refresh_unity(
                 )
 
         try:
-            yaml_guard = await guard_external_yaml_refresh(
+            yaml_guard = await asyncio.wait_for(guard_external_yaml_refresh(
                 ctx,
                 unity_instance,
                 external_state,
                 editor_state_data=pre_refresh_state,
-            )
+            ), timeout=max(0.001, deadline - time.monotonic()))
             if yaml_guard is not None:
                 return yaml_guard
         except Exception:
@@ -386,6 +391,11 @@ async def refresh_unity(
                     },
                 )
 
+    if time.monotonic() >= deadline:
+        return MCPResponse(success=False, code="refresh_prechecks_timeout",
+            error="The overall refresh budget expired during read-only prechecks.",
+            data={"refresh_not_sent": True, "request_outcome": "not_sent", "safe_to_retry_refresh": False})
+
     baseline_state: dict[str, Any] | None = None
     if wait_for_ready and compile == "request":
         baseline_state = pre_refresh_state
@@ -396,55 +406,45 @@ async def refresh_unity(
         "compile": compile,
         "wait_for_ready": bool(wait_for_ready),
     }
+    checkpoint = external_changes_scanner.capture_refresh_checkpoint(instance_id) if instance_id else None
+    from services.state.refresh_observation import try_refresh_runtime
+    runtime_result = await try_refresh_runtime(ctx, unity_instance, params, deadline=deadline)
+    if runtime_result is not None:
+        if (runtime_result.success and wait_for_ready and scope in {"all", "assets"}
+                and instance_id and (runtime_result.data or {}).get("refresh_triggered") is True):
+            runtime_result.data["external_changes_acknowledged"] = external_changes_scanner.acknowledge_refresh(instance_id, checkpoint)
+        return runtime_result
 
-    recovered_from_disconnect = False
     # Don't retry on reload - refresh_unity triggers compilation/reload,
     # so retrying would cause multiple reloads (issue #577)
-    response = await unity_transport.send_with_unity_instance(
+    params["wait_for_ready"] = False  # One server-side wait, not two independent 60s waits.
+    try:
+        response = await asyncio.wait_for(unity_transport.send_with_unity_instance(
         _legacy_conn.async_send_command_with_retry,
         unity_instance,
         "refresh_unity",
         params,
         retry_on_reload=False,
-    )
+        ), timeout=max(0.001, deadline - time.monotonic()))
+    except asyncio.TimeoutError:
+        return MCPResponse(success=False, code="refresh_outcome_unknown", error="Refresh response exceeded the overall budget.",
+                           data={"safe_to_retry_refresh": False, "request_outcome": "outcome_unknown"})
 
-    # Handle connection errors during refresh/compile gracefully.
-    # Unity disconnects during domain reload, which is expected behavior - not a failure.
-    # If we sent the command and connection closed, the refresh was likely triggered successfully.
-    # Convert MCPResponse to dict if needed
+    # A reload disconnect does not establish whether the original refresh succeeded.
+    # Convert MCPResponse to dict if needed; keep uncertainty instead of guessing.
     response_dict = response if isinstance(response, dict) else (response.model_dump() if hasattr(response, "model_dump") else response.__dict__)
-    if not response_dict.get("success", True):
-        hint = response_dict.get("hint")
+    if response_dict.get("success") is not True:
+        # Connection strings can establish uncertainty, never successful execution.
         err = (response_dict.get("error") or response_dict.get("message") or "").lower()
-        reason = _extract_response_reason(response_dict)
-
-        # Connection closed/timeout during compile = refresh was triggered, Unity is reloading
-        # This is SUCCESS, not failure - don't return error to prevent Claude Code from retrying
-        is_connection_lost = (
-            "connection closed" in err
-            or "disconnected" in err
-            or "aborted" in err  # WinError 10053: connection aborted
-            or "timeout" in err
-            or reason == "reloading"
-        )
-
-        if is_connection_lost and compile == "request":
-            # EXPECTED BEHAVIOR: When compile="request", Unity triggers domain reload which
-            # causes connection to close mid-command. This is NOT a failure - the refresh
-            # was successfully triggered. Treating this as success prevents Claude Code from
-            # retrying unnecessarily (which would cause multiple domain reloads - issue #577).
-            # The subsequent wait_for_ready loop (below) will verify Unity becomes ready.
-            logger.info("refresh_unity: Connection lost during compile (expected - domain reload triggered)")
-            recovered_from_disconnect = True
-        elif hint == "retry" or "could not connect" in err:
-            # Retryable error - proceed to wait loop if wait_for_ready
-            if not wait_for_ready:
-                return MCPResponse(**response_dict)
-            recovered_from_disconnect = True
-        else:
-            # Non-recoverable error - connection issue unrelated to domain reload
-            logger.warning(f"refresh_unity: Non-recoverable error (compile={compile}): {err[:100]}")
-            return MCPResponse(**response_dict)
+        if (response_dict.get("code") in {"PLUGIN_DISCONNECTED", "OUTCOME_UNKNOWN"}
+                or any(word in err for word in ("disconnect", "connection closed", "timeout", "aborted"))):
+            uncertain = dict(response_dict.get("data") or {})
+            uncertain.update({"request_outcome": "outcome_unknown", "safe_to_retry_refresh": False,
+                              "recommended_next_action": "read_editor_diagnostics_and_original_receipt"})
+            return MCPResponse(success=False, code="refresh_outcome_unknown",
+                               error=response_dict.get("error") or "Original refresh outcome is unknown.",
+                               data=uncertain)
+        return MCPResponse(**response_dict)
 
     # Optional server-side wait loop (defensive): if Unity tool doesn't wait or returns quickly,
     # poll the canonical editor_state resource until ready or timeout.
@@ -454,7 +454,7 @@ async def refresh_unity(
     if wait_for_ready:
         ready_confirmed, wait_elapsed_s, final_state = await _wait_for_editor_ready_state(
             ctx,
-            timeout_s=60.0,
+            timeout_s=max(0, deadline - time.monotonic()),
             after_state=baseline_state,
             require_compilation_cycle=(
                 compile == "request" and baseline_state is not None
@@ -499,13 +499,10 @@ async def refresh_unity(
                 data=timeout_data,
             )
 
-    # After readiness is restored, clear any external-dirty flag for this instance so future tools can proceed cleanly.
-    try:
-        inst = unity_instance or await editor_state.infer_single_instance_id(ctx)
-        if inst:
-            external_changes_scanner.clear_dirty(inst)
-    except Exception:
-        pass
+    # Only acknowledge a proven full refresh with an unchanged, complete scan boundary.
+    if wait_for_ready and ready_confirmed and scope in {"all", "assets"} and instance_id:
+        if (response_dict.get("data") or {}).get("refresh_triggered") is True:
+            external_changes_scanner.acknowledge_refresh(instance_id, checkpoint)
 
     if wait_for_ready:
         resulting_state, blocking_reasons = _editor_state_result(final_state)
@@ -538,8 +535,6 @@ async def refresh_unity(
             # response hint. Keep both levels consistent after the server wait.
             "hint": "Unity is ready for tool calls.",
         })
-        if recovered_from_disconnect:
-            ready_data["recovered_from_disconnect"] = True
 
         return MCPResponse(
             success=True,

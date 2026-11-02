@@ -10,18 +10,26 @@ dependencies and their declared licenses are:
 
 | Dependency | Declared license |
 | --- | --- |
+| Authlib | BSD-3-Clause |
+| certifi | MPL-2.0 |
 | Click | BSD-3-Clause |
 | FastAPI | MIT |
 | FastMCP | Apache-2.0 |
 | HTTPX | BSD-3-Clause |
 | MCP Python SDK | MIT |
+| OpenTelemetry-API | Apache-2.0 |
 | Pydantic | MIT |
+| PyJWT | MIT |
 | tomli | MIT |
 | Uvicorn | BSD-3-Clause |
 
 Direct test dependencies use MIT or Apache-2.0. Notable transitive licenses in
-the locked environment include MPL-2.0 (`certifi`), Apache-2.0/BSD
-(`cryptography`), PSF licenses (`pywin32`, `typing_extensions`), and the
+the locked environment include Apache-2.0/BSD (`cryptography`),
+PSF licenses (`pywin32`, `typing_extensions`), and the
 Unlicense (`email-validator`). Dependencies are resolved separately and are not
 vendored into the server source. The metadata installed with each dependency
 is the authority for its exact license text.
+
+Authlib, certifi, OpenTelemetry-API and PyJWT were already resolved server
+dependencies. Their explicit declarations enforce security minimum versions
+for source/Git installations as well as the lockfile.

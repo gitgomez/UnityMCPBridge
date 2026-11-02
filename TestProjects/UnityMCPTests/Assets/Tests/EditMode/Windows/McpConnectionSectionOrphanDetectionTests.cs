@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using MCPForUnity.Editor.Windows.Components.Connection;
 
 namespace MCPForUnityTests.Editor.Windows
@@ -12,6 +14,30 @@ namespace MCPForUnityTests.Editor.Windows
     public class McpConnectionSectionOrphanDetectionTests
     {
         private static readonly int Threshold = McpConnectionSection.OrphanedSessionDownPollThreshold;
+
+        [Test]
+        public async Task RefusedServerStop_PreservesConnectedSession()
+        {
+            bool sessionConnected = true;
+            bool stopped = await McpConnectionSection.StopServerAndSessionAsync(
+                () => false,
+                () => { sessionConnected = false; return Task.CompletedTask; });
+
+            Assert.IsFalse(stopped);
+            Assert.IsTrue(sessionConnected, "Refusing to stop a shared/unowned server must not disconnect its session.");
+        }
+
+        [Test]
+        public async Task SuccessfulServerStop_ThenEndsSession()
+        {
+            var calls = new List<string>();
+            bool stopped = await McpConnectionSection.StopServerAndSessionAsync(
+                () => { calls.Add("server stopped"); return true; },
+                async () => { await Task.Yield(); calls.Add("session ended"); });
+
+            Assert.IsTrue(stopped);
+            CollectionAssert.AreEqual(new[] { "server stopped", "session ended" }, calls);
+        }
 
         [Test]
         public void EndsSession_AtThreshold_WhenIdleAndRunning()

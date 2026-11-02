@@ -631,6 +631,19 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 case "receipt_ledger":
                     await HandleReceiptLedgerAsync(payload, token).ConfigureAwait(false);
                     break;
+                case "editor_diagnostics":
+                    if (_runtimeNegotiation != null &&
+                        _runtimeNegotiation.HasCapability(CommandRuntimeProtocol.ControlPathCapability) &&
+                        _runtimeNegotiation.HasCapability(CommandRuntimeProtocol.EditorDiagnosticsCapability) &&
+                        _runtimeNegotiation.HasCapability(CommandRuntimeProtocol.CompileDiagnosticsCapability))
+                    {
+                        await SendJsonAsync(new JObject
+                        {
+                            ["type"] = "editor_diagnostics_result", ["id"] = payload.Value<string>("id"),
+                            ["result"] = new JObject { ["success"] = true, ["data"] = EditorDiagnostics.Snapshot() }
+                        }, token).ConfigureAwait(false);
+                    }
+                    break;
                 case "ping":
                     await SendPongAsync(token).ConfigureAwait(false);
                     break;
@@ -921,6 +934,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     }
                     CommandReceiptLedger.MarkQueued(requestId);
                 }
+                commandEnvelope["runtime_request_id"] = requestId;
                 string commandJson = commandEnvelope.ToString(Formatting.None);
                 responseJson = runtimeManaged
                     ? await TransportCommandDispatcher.ExecuteRuntimeCommandJsonAsync(

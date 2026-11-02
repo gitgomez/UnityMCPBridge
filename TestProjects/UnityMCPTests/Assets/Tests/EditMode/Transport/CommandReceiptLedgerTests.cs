@@ -198,6 +198,14 @@ namespace MCPForUnityTests.Editor.Transport
             JObject full = CommandReceiptLedger.Diagnose();
             Assert.AreEqual(512, full.Value<int>("total"));
             Assert.AreEqual(512, full["counts"].Value<int>("succeeded"));
+            // Independent diagnosis must neither enter receipt admission nor prune terminal evidence.
+            byte[] persistedBeforeDiagnosis = File.ReadAllBytes(Path.Combine(projectRoot,
+                "Library", "MCPForUnity", "RunState", "command-receipts-v1.json"));
+            JObject diagnosis = MCPForUnity.Editor.Services.EditorDiagnostics.Snapshot();
+            Assert.AreEqual("editor_diagnostics@1", diagnosis.Value<string>("schema_version"));
+            Assert.AreEqual(512, CommandReceiptLedger.Diagnose().Value<int>("total"));
+            CollectionAssert.AreEqual(persistedBeforeDiagnosis, File.ReadAllBytes(Path.Combine(projectRoot,
+                "Library", "MCPForUnity", "RunState", "command-receipts-v1.json")));
 
             long expiredNow = initialNow
                 + (long)CommandReceiptLedger.ReceiptRetention.TotalMilliseconds

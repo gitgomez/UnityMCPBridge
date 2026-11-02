@@ -27,6 +27,7 @@ async def configured_hub():
     registry = PluginRegistry()
     PluginHub.configure(registry, asyncio.get_running_loop())
 
+    await registry.register("session-1", "Legacy", "legacy-hash", "6000.3.9f1")
     yield
 
     for task in list(PluginHub._ping_tasks.values()):

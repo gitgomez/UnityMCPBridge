@@ -18,6 +18,15 @@ def editor():
     pass
 
 
+@editor.command("diagnostics")
+@handle_unity_errors
+def diagnostics():
+    """Read liveness, modal and compile evidence without command/receipt admission."""
+    from cli.utils.connection import run_editor_diagnostics
+    config = get_config()
+    click.echo(format_output(run_editor_diagnostics(config), config.format))
+
+
 @editor.command("input")
 @click.argument("action", type=click.Choice(["status", "key", "move", "click", "drag", "scroll", "cancel"]))
 @click.option("--key", "keys", multiple=True, help="Repeat for a chord; Input System key names.")

@@ -48,6 +48,58 @@ def test_external_changes_scanner_marks_dirty_and_clears(tmp_path, monkeypatch):
     assert isinstance(third["last_cleared_unix_ms"], int)
 
 
+@pytest.mark.parametrize("newer_edit", [False, True])
+def test_refresh_acknowledgement_preserves_edits_after_its_checkpoint(
+    tmp_path, monkeypatch, newer_edit
+):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    from services.state.external_changes_scanner import ExternalChangesScanner
+
+    root = tmp_path / "Project"
+    (root / "Assets").mkdir(parents=True)
+    (root / "ProjectSettings").mkdir()
+    (root / "Packages").mkdir()
+    script = root / "Assets" / "Changed.cs"
+    script.write_text("// baseline")
+    scanner = ExternalChangesScanner(scan_interval_ms=0, max_entries=10000)
+    instance = "Test@refresh-checkpoint"
+    scanner.set_project_root(instance, str(root))
+    scanner.update_and_get(instance)
+    now = time.time()
+    os.utime(script, (now + 10, now + 10))
+    assert scanner.update_and_get(instance)["external_changes_dirty"] is True
+    checkpoint = scanner.capture_refresh_checkpoint(instance)
+    assert checkpoint is not None
+
+    if newer_edit:
+        os.utime(script, (now + 20, now + 20))
+    assert scanner.acknowledge_refresh(instance, checkpoint) is (not newer_edit)
+    assert scanner.update_and_get(instance)["external_changes_dirty"] is newer_edit
+
+
+def test_refresh_acknowledgement_refuses_missing_or_incomplete_scans(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    from services.state.external_changes_scanner import ExternalChangesScanner
+
+    scanner = ExternalChangesScanner(scan_interval_ms=0, max_entries=1)
+    instance = "Test@incomplete-checkpoint"
+    assert scanner.capture_refresh_checkpoint(instance) is None
+    assert scanner.acknowledge_refresh(instance, None) is False
+    root = tmp_path / "Project"
+    assets = root / "Assets"
+    assets.mkdir(parents=True)
+    (root / "ProjectSettings").mkdir()
+    (root / "Packages").mkdir()
+    for index in range(3):
+        (assets / f"Changed{index}.cs").write_text("// file")
+    scanner.set_project_root(instance, str(root))
+    scanner.update_and_get(instance)
+    assert scanner.capture_refresh_checkpoint(instance) is None
+    assert scanner.acknowledge_refresh(instance, ("unproven",)) is False
+
+
 def test_external_changes_scanner_includes_file_dependency_roots(tmp_path, monkeypatch):
     # Ensure the scanner is active for this unit-style test (not gated by PYTEST_CURRENT_TEST).
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
