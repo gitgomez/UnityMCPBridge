@@ -21,7 +21,7 @@
 
 ### Prerequisites
 
-- **Python 3.10+** installed
+- **Python 3.11+** installed
 - **Unity Editor** running with the MCP plugin enabled
 - **MCP Server** running (HTTP transport on port 8080)
 

@@ -53,7 +53,7 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
                 }
 
                 status.ErrorMessage = "Python not found in PATH or standard locations";
-                status.Details = "Install Python 3.10+ via Homebrew ('brew install python3') and ensure it's in your PATH.";
+                status.Details = "Install Python 3.11+ via Homebrew ('brew install python3') and ensure it's in your PATH.";
             }
             catch (Exception ex)
             {

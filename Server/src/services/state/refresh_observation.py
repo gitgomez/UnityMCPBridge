@@ -12,6 +12,16 @@ from transport.plugin_hub import PluginHub
 from transport.runtime_protocol import CONTROL_PATH_CAPABILITY, EDITOR_DIAGNOSTICS_CAPABILITY, COMPILE_DIAGNOSTICS_CAPABILITY, REQUEST_RECEIPTS_CAPABILITY
 
 
+def _completed_cycle_succeeded(cycle):
+    if not cycle or cycle.get("status") != "completed" or cycle.get("capture_complete") is not True:
+        return None
+    if type(cycle.get("succeeded")) is bool:
+        return cycle["succeeded"]
+    # Retained history summaries keep the authoritative error count, not messages.
+    errors = cycle.get("errors")
+    return errors == 0 if type(errors) is int and errors >= 0 else None
+
+
 async def try_refresh_runtime(ctx, instance, params, *, deadline):
     if config.transport_mode.lower() != "http":
         return None
@@ -57,6 +67,7 @@ async def try_refresh_runtime(ctx, instance, params, *, deadline):
     ready = False
     compile_done = params.get("compile") != "request"
     observed_cycle = None
+    latest_compile_succeeded = None
     while time.monotonic() < deadline:
         try:
             # Re-resolve ONLY the same project after reload; never re-send refresh.
@@ -70,7 +81,11 @@ async def try_refresh_runtime(ctx, instance, params, *, deadline):
                 compilation = last.get("compilation") or {}
                 request = next((r for r in compilation.get("requests", [])
                                 if r.get("request_id") == request_id), None)
-                cycle = compilation.get("last_cycle") or {}
+                latest_cycle = compilation.get("last_cycle") or {}
+                latest_compile_succeeded = _completed_cycle_succeeded(latest_cycle)
+                candidates = request.get("candidate_cycle_ids", []) if request else []
+                cycle = next((c for c in [latest_cycle, *compilation.get("history", [])]
+                              if len(candidates) == 1 and c.get("id") == candidates[0]), {})
                 # A foreign cycle or a coalesced/multiple candidate is not an exclusive proof.
                 compile_done = params.get("compile") != "request" or bool(
                     request and request.get("request_returned") is True
@@ -93,7 +108,8 @@ async def try_refresh_runtime(ctx, instance, params, *, deadline):
     data.update({"request_outcome": receipt_state, "ready_for_tools": ready,
                  "compilation_observation": (last or {}).get("compilation"),
                  "compile_cycle_confirmed": compile_done,
-                 "compile_succeeded": observed_cycle.get("succeeded") if observed_cycle else None,
+                 "compile_succeeded": _completed_cycle_succeeded(observed_cycle),
+                 "latest_compile_succeeded": latest_compile_succeeded,
                  "recommended_next_action": "read_editor_diagnostics_and_original_receipt"})
     if last:
         data["editor_diagnostics"] = last
@@ -110,8 +126,10 @@ async def try_refresh_runtime(ctx, instance, params, *, deadline):
                            error="The original refresh outcome is not confirmed successful; it was not repeated.", data=data)
     if not ready or not compile_done:
         return MCPResponse(success=False, code="editor_readiness_timeout", error="Refresh completed, but readiness or the requested compile cycle was not confirmed within the overall budget.", data=data)
-    if params.get("compile") == "request" and observed_cycle.get("succeeded") is not True:
-        return MCPResponse(success=False, code="compilation_failed", error="Unity is reachable, but the observed compile cycle has compiler errors.", data=data)
+    if params.get("compile") == "request" and (
+        _completed_cycle_succeeded(observed_cycle) is not True or latest_compile_succeeded is False
+    ):
+        return MCPResponse(success=False, code="compilation_failed", error="Unity is reachable, but the requested or latest compile cycle is not confirmed successful.", data=data)
     data["hint"] = "Unity is ready; the requested compile cycle is reported separately."
     return MCPResponse(success=True, message="Original refresh and editor readiness confirmed.",
                        data=data, runtime=response.get("runtime"), hint=data["hint"])

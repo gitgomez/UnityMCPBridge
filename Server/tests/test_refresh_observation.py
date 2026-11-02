@@ -75,6 +75,37 @@ async def test_reconnect_queries_original_receipt_without_repeating_refresh(runt
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("requested_errors,latest_errors,capture,success,code", [
+    (0, 0, True, True, None),
+    (1, 0, True, False, "compilation_failed"),
+    (0, 1, True, False, "compilation_failed"),
+    (0, 0, False, False, "editor_readiness_timeout"),
+])
+async def test_later_cycle_does_not_hide_requested_cycle_history(
+    runtime, monkeypatch, requested_errors, latest_errors, capture, success, code
+):
+    sent = configure(monkeypatch)
+
+    async def read(session):
+        result = observation(sent[0][2]["request_id"], errors=latest_errors)
+        compilation = result["data"]["compilation"]
+        compilation["last_cycle"]["id"] = "epoch:2"
+        compilation["history"] = [{"id": "epoch:1", "status": "completed",
+                                   "capture_complete": capture, "errors": requested_errors}]
+        return result
+
+    monkeypatch.setattr(PluginHub, "query_editor_diagnostics", read)
+    result = await try_refresh_runtime(runtime.ctx, "project-hash",
+        {"compile": "request", "wait_for_ready": True}, deadline=time.monotonic() + 0.02)
+    assert result.success is success
+    assert result.code == code
+    assert result.data["compile_cycle_confirmed"] is capture
+    assert result.data["compile_succeeded"] is ((requested_errors == 0) if capture else None)
+    assert result.data["latest_compile_succeeded"] is (latest_errors == 0)
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_unknown_receipt_never_becomes_success_from_ready_or_compile(runtime, monkeypatch):
     sent = configure(monkeypatch, response={"success": False, "code": "PLUGIN_DISCONNECTED", "error": "disconnected"})
     runtime.receipt.return_value = {"receipt": {"state": "outcome_unknown"}}

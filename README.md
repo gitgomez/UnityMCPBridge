@@ -129,8 +129,10 @@ A refused stop keeps the session connected and explains the refusal in the
 connection window.
 
 This release also updates Authlib, FastMCP/FastMCP-Slim, PyJWT,
-OpenTelemetry-API and certifi. Security minimum versions apply to direct
-Git/uvx installations as well as the checked-in server lockfile.
+OpenTelemetry-API, certifi and dnspython. Security minimum versions apply to direct
+Git/uvx installations as well as the checked-in server lockfile. The server now
+requires **Python 3.11+** because the fixed dnspython release no longer supports
+Python 3.10. Install a supported interpreter with `uv python install 3.11` if needed.
 
 Use a matched v10.4.0 package/server and discover negotiated capabilities. Read
 [diagnostic limits and safe recovery](docs/development/EDITOR_DIAGNOSTICS.md).
@@ -142,7 +144,7 @@ Use a matched v10.4.0 package/server and discover negotiated capabilities. Read
   verified Unity 6 versions;
 - Git; private mirrors additionally require credentials that Unity Package
   Manager can use;
-- Python 3.10 or newer, managed through
+- Python 3.11 or newer, managed through
   [`uv`](https://docs.astral.sh/uv/); and
 - an MCP-capable client.
 

@@ -50,6 +50,7 @@ declare the following licenses:
 | Authlib | BSD-3-Clause |
 | certifi | MPL-2.0 |
 | Click | BSD-3-Clause |
+| dnspython | ISC |
 | FastAPI | MIT |
 | FastMCP | Apache-2.0 |
 | HTTPX | BSD-3-Clause |
@@ -66,7 +67,7 @@ PSF licenses (`pywin32`, `typing_extensions`), and the
 Unlicense (`email-validator`). The metadata installed with each dependency is
 the authority for its exact license text.
 
-Authlib, certifi, OpenTelemetry-API and PyJWT were already resolved server
+Authlib, certifi, dnspython, OpenTelemetry-API and PyJWT were already resolved server
 dependencies. Their explicit declarations enforce security minimum versions
 for source/Git installations as well as the lockfile.
 

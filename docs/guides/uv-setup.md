@@ -15,12 +15,14 @@ The key to configuring MCP with **Cursor, VS Code, Windsurf, and Rider is [`uv`]
 
 ## Requirements
 
-You need **Python 3.10+** and the **`uv`** package manager.
+You need **Python 3.11+** and the **`uv`** package manager. Starting with v10.4.0,
+the fixed dnspython dependency requires Python 3.11 or newer. If an older
+interpreter is installed, `uv python install 3.11` adds a supported version.
 
 ### Verify
 
 ```bash
-python3 --version   # should be 3.10+
+python3 --version   # should be 3.11+
 uv --version        # should print a version like "uv 0.x"
 ```
 
@@ -32,7 +34,7 @@ uv --version        # should print a version like "uv 0.x"
 # Option A: Official installer (recommended)
 # Download from https://www.python.org/downloads/
 
-# Option B: Homebrew (3.12 is the latest LTS as of writing; 3.10 also works)
+# Option B: Homebrew (Python 3.12 meets the requirement)
 brew install python@3.12
 ```
 

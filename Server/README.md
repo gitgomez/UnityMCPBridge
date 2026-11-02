@@ -1,7 +1,7 @@
 # MCP for Unity Server
 
 [![MCP](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
-[![python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![python](https://img.shields.io/badge/Python-3.11+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![License](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
 
 Model Context Protocol server for Unity Editor integration. Control Unity through natural language using AI assistants like Claude, Cursor, and more.
@@ -278,7 +278,7 @@ For complete documentation, troubleshooting, and advanced usage:
 
 ## Requirements
 
-- **Python:** 3.10 or newer
+- **Python:** 3.11 or newer
 - **Unity Editor:** 6.0 or newer
 - **uv:** Python package manager ([Installation Guide](https://docs.astral.sh/uv/getting-started/installation/))
 

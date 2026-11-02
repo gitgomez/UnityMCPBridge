@@ -5,7 +5,7 @@ UnityMCPBridge consists of a Unity package and a Python MCP server. Install both
 ## Prerequisites
 
 - **Unity 6.0 or newer** — [Download Unity](https://unity.com/download)
-- **Python 3.10+** with [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- **Python 3.11+** with [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 - **An MCP client** — Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Codex, or another MCP-capable client
 
 > [!NOTE]

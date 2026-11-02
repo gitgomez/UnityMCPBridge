@@ -142,6 +142,12 @@ the server directly; a server-only update does not fix those clients.
 
 ## Safe recovery
 
+Refresh observation resolves the request's single candidate cycle against the
+latest cycle and retained history. A later cycle cannot hide an already
+completed requested cycle. Both the requested and latest observed compile
+results are reported; compiler errors in either prevent a successful result.
+Missing, incomplete or evicted evidence remains unconfirmed.
+
 1. Stop sending mutations. Record the target `Name@hash` and original request
    ID, then read independent diagnostics and the original receipt where
    available. Diagnose ledger saturation with `unity-mcp receipts status`, not
